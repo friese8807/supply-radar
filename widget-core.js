@@ -150,7 +150,7 @@ function marketBlock(p, m, o) {
   vals.forEach(([l, v], i) => {
     if (i) s.addSpacer(o.row);
     const r = hstack(s);
-    const lb = fixed(r, o.lw); txt(lb, l, o.fs - 1, C.sub, "m");
+    const lb = fixed(r, o.lw); txt(lb, l, o.fs - 1, C.sub, "m"); lb.addSpacer();
     const im = r.addImage(divBar(v, mx, o.bw, o.bh)); im.imageSize = new Size(o.bw, o.bh);
     r.addSpacer();
     txt(r, eok(v), o.fs, tone(v || 0), "rb");
@@ -168,22 +168,26 @@ function stockHead(p, st, fs) {
   txt(h, pctTxt(st.pct), fs, tone(st.pct || 0), "rs");
   return h;
 }
-/** 종목: 외·기·개 오늘 금액 한 줄 */
-function trio(p, st, fs) {
+/** 종목: 외국인·기관·개인 오늘 금액, 세 칸 (위 이름, 아래 금액) */
+function trio(p, st, fs, colW) {
   const r = hstack(p), t = st.trend[0];
-  INV.forEach(([l, , k], i) => {
+  r.topAlignContent();
+  INV.forEach(([l, , k, c], i) => {
     if (i) r.addSpacer();
-    txt(r, l === "외국인" ? "외" : l === "기관" ? "기" : "개", fs - 1, C.faint, "s");
-    r.addSpacer(3);
-    const v = amt(t, k);
-    txt(r, eok(v, false), fs, tone(v || 0), "rb");
+    const cell = vstack(r); if (colW) cell.size = new Size(colW, 0);
+    const lh = hstack(cell);
+    const sw = lh.addStack(); sw.size = new Size(6, 6); sw.cornerRadius = 1.5; sw.backgroundColor = c; lh.addSpacer(4);
+    txt(lh, l, fs - 2, C.sub, "m"); lh.addSpacer();
+    cell.addSpacer(1);
+    const vh = hstack(cell); const v = amt(t, k);
+    txt(vh, eok(v), fs + 1, tone(v || 0), "rb"); vh.addSpacer();
   });
   return r;
 }
-function streakTxt(st) {
+function streakTxt(st, short) {
   const f = streak(series(st, "foreign")), o = streak(series(st, "organ"));
-  const one = (n, s) => (s.n ? n + " " + s.n + "일 " + (s.buy ? "매수" : "매도") : n + " 보합");
-  return { t: one("외", f) + " · " + one("기", o), c: f.n ? (f.buy ? C.buy : C.sell) : C.sub };
+  const one = (n, s) => (s.n ? n + " " + s.n + "일 연속 " + (s.buy ? "매수" : "매도") : n + " 보합");
+  return { t: short ? one("외국인", f) : one("외국인", f) + " · " + one("기관", o), c: f.n ? (f.buy ? C.buy : C.sell) : C.sub };
 }
 
 /* ---------- 데이터 ---------- */
@@ -233,7 +237,7 @@ function small(w, d, param) {
     w.addSpacer();
     smallRows(w, INV.map(k => [k[0], amt(st.trend[0], k[2])]));
     w.addSpacer();
-    const sk = streakTxt(st); txt(w, sk.t, 10, sk.c, "s");
+    const sk = streakTxt(st, true); txt(w, sk.t, 10, sk.c, "s");
     return;
   }
   const m = d.markets.find(x => x.code === (/^(kosdaq|코스닥)$/i.test(param) ? "KOSDAQ" : "KOSPI")) || d.markets[0];
@@ -273,9 +277,9 @@ function large(w, d, stocks) {
   header(w, d, 15);
   w.addSpacer(7);
   const mk = hstack(w); mk.topAlignContent();
-  const o = { fs: 12, gap: 4, row: 3, lw: 32, bw: 26, bh: 5 };
+  const o = { fs: 12, gap: 4, row: 3, lw: 36, bw: 24, bh: 5 };
   d.markets.slice(0, 2).forEach((m, i) => { if (i) mk.addSpacer(18); const c = vstack(mk); c.size = new Size(144, 0); marketBlock(c, m, o); });
-  w.addSpacer(8);
+  w.addSpacer(7);
 
   // 장중 흐름
   const box = vstack(w); box.backgroundColor = C.card; box.cornerRadius = 12; box.setPadding(8, 10, 8, 10);
@@ -287,25 +291,25 @@ function large(w, d, stocks) {
     txt(lh, l, 10, C.sub, "m");
   });
   box.addSpacer(4);
-  if (pts.length >= 2) { const im = box.addImage(lines(pts, 286, 54)); im.imageSize = new Size(286, 54); }
-  else { const e = hstack(box); e.size = new Size(286, 54); txt(e, "장이 열리면 약 5분마다 쌓여요", 11, C.faint, "m"); }
+  if (pts.length >= 2) { const im = box.addImage(lines(pts, 286, 46)); im.imageSize = new Size(286, 46); }
+  else { const e = hstack(box); e.size = new Size(286, 46); txt(e, "장이 열리면 약 5분마다 쌓여요", 11, C.faint, "m"); }
   w.addSpacer(8);
 
   // 종목
   stocks.slice(0, 2).forEach((st, i) => {
-    if (i) w.addSpacer(7);
+    if (i) w.addSpacer(8);
     stockHead(w, st, 12);
-    w.addSpacer(3);
-    trio(w, st, 12);
+    w.addSpacer(4);
+    trio(w, st, 12, 96);
     w.addSpacer(4);
     const r = hstack(w);
     const vals = series(st, "foreign");
-    const im = r.addImage(dailyBars(vals, 104, 22)); im.imageSize = new Size(104, 22);
+    const im = r.addImage(dailyBars(vals, 92, 18)); im.imageSize = new Size(92, 18);
     r.addSpacer(8);
     const tx = vstack(r);
     const sk = streakTxt(st); txt(tx, sk.t, 10, sk.c, "s");
     const sg = signal(st);
-    txt(tx, sg ? sg.t : "왼쪽: 외국인 최근 " + vals.length + "일", 9.5, sg ? sg.c : C.faint, "m");
+    if (sg) txt(tx, sg.t, 9.5, sg.c, "m");
   });
   w.addSpacer();
 }
