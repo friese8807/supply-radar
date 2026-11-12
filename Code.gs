@@ -180,9 +180,19 @@ function pickTrend(j) {
       organ: num(r.organPureBuyQuant),
       individual: num(r.individualPureBuyQuant),
       holdRatio: num(r.foreignerHoldRatio),
-      close: num(r.closePrice)
+      close: num(r.closePrice),
+      change: signedChange_(r)
     };
   }).filter(function (r) { return r.date && (r.foreign !== null || r.organ !== null); });
+}
+
+/** 전일 대비. 하락인데 부호가 빠진 경우 바로잡음 */
+function signedChange_(r) {
+  var c = num(r.compareToPreviousClosePrice);
+  if (c === null) return null;
+  var dir = r.compareToPreviousPrice && String(r.compareToPreviousPrice.code);
+  if ((dir === '4' || dir === '5') && c > 0) c = -c;
+  return c;
 }
 
 function pickSearch(j) {

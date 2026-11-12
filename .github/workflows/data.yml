@@ -26,8 +26,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: 이전 데이터 받기 (장중 흐름 이어 쌓기)
+        run: git fetch --depth 1 origin data && git show FETCH_HEAD:data.json > prev.json || echo '{}' > prev.json
       - name: 네이버 증권에서 수급 받기
-        run: node fetch.cjs out
+        run: node fetch.cjs out prev.json
       - name: 데이터 브랜치에 올리기
         run: |
           cd out

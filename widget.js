@@ -10,8 +10,8 @@ const C = {
   bg: Color.dynamic(new Color("#ffffff"), new Color("#16181d")),
   ink: Color.dynamic(new Color("#16181d"), new Color("#f2f3f5")),
   sub: Color.dynamic(new Color("#6c7078"), new Color("#9aa0aa")),
-  buy: Color.dynamic(new Color("#1c4fb0"), new Color("#6ea0ff")),
-  sell: Color.dynamic(new Color("#b3262f"), new Color("#ff7b82")),
+  buy: Color.dynamic(new Color("#c8262c"), new Color("#ff7a80")),   // 순매수·상승 = 빨강
+  sell: Color.dynamic(new Color("#1d4fc4"), new Color("#86a9ff")),  // 순매도·하락 = 파랑
 };
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
@@ -82,7 +82,7 @@ function block(parent, title, pct, rows, foot, footColor) {
   const h = s.addStack(); h.centerAlignContent();
   const t = h.addText(title); t.font = Font.semiboldSystemFont(13); t.textColor = C.ink; t.lineLimit = 1;
   h.addSpacer();
-  if (pct !== null) { const p = h.addText((pct > 0 ? "+" : "") + pct.toFixed(2) + "%"); p.font = Font.mediumSystemFont(11); p.textColor = pct > 0 ? C.sell : pct < 0 ? C.buy : C.sub; }
+  if (pct !== null) { const p = h.addText((pct > 0 ? "+" : "") + pct.toFixed(2) + "%"); p.font = Font.mediumSystemFont(11); p.textColor = pct > 0 ? C.buy : pct < 0 ? C.sell : C.sub; }
   s.addSpacer(6);
   for (const [k, v] of rows) {
     const r = s.addStack(); r.centerAlignContent();

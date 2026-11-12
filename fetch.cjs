@@ -19,7 +19,23 @@ async function get(url) {
   return null;
 }
 
-(async () => {
+function readPrev(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return null; } }
+
+/** 시장 수급을 시각별로 쌓습니다(같은 집계일만, 값이 바뀔 때만). */
+function intraday(prevMarket, flow, hhmm) {
+  let pts = prevMarket && prevMarket.flow && flow && prevMarket.flow.date === flow.date && Array.isArray(prevMarket.intraday) ? prevMarket.intraday.slice() : [];
+  if (!flow) return pts;
+  const pt = { t: hhmm, p: flow.personal, f: flow.foreign, i: flow.institution };
+  const last = pts[pts.length - 1];
+  if (!last || last.p !== pt.p || last.f !== pt.f || last.i !== pt.i) {
+    if (last && last.t === hhmm) pts[pts.length - 1] = pt; else pts.push(pt);
+  }
+  return pts.slice(-240);
+}
+
+if (require.main === module) (async () => {
+  const prev = readPrev(process.argv[3] || '');
+  const hhmm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16);
   const watch = JSON.parse(fs.readFileSync(path.join(__dirname, 'watchlist.json'), 'utf8'));
   const codes = watch.map(w => w.code);
   const errors = [];
@@ -32,7 +48,8 @@ async function get(url) {
     if (!flow) flow = P.pickFlow(await get('https://m.stock.naver.com/api/index/' + mk.code + '/trend'));
     if (!flow) errors.push(mk.name + ' 투자자 동향을 받지 못했습니다');
     const q = P.pickQuote(rt, 0) || {};
-    markets.push({ code: mk.code, name: mk.name, price: q.price, change: q.change, pct: q.pct, status: q.status, tradedAt: q.tradedAt, flow });
+    const pm = prev && Array.isArray(prev.markets) ? prev.markets.find(x => x.code === mk.code) : null;
+    markets.push({ code: mk.code, name: mk.name, price: q.price, change: q.change, pct: q.pct, status: q.status, tradedAt: q.tradedAt, flow, intraday: intraday(pm, flow, hhmm) });
   }
   const rtStocks = await get('https://polling.finance.naver.com/api/realtime/domestic/stock/' + codes.join(','));
   const stocks = [];
@@ -49,3 +66,5 @@ async function get(url) {
   fs.writeFileSync(path.join(process.argv[2] || 'out', 'data.json'), JSON.stringify(out));
   console.log('markets', markets.map(x => x.code + ':' + JSON.stringify(x.flow)).join(' '), '| stocks', stocks.length, '| errors', errors.length);
 })();
+
+module.exports = { intraday };

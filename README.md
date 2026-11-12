@@ -6,7 +6,7 @@
 | 파일 | 역할 |
 | --- | --- |
 | `index.html` | 웹앱 화면 (홈 화면에 추가해서 사용) |
-| `icon-180.png`, `icon-512.png`, `manifest.json` | 홈 화면 아이콘 |
+| `icon-180-v2.png`, `icon-512-v2.png`, `manifest.json` | 홈 화면 아이콘 |
 | `widget.js` | 아이폰 Scriptable 위젯 |
 | `fetch.cjs`, `watchlist.json` | GitHub Actions가 약 5분마다 `data` 브랜치의 `data.json`을 갱신 |
 | `Code.gs` | (선택) Apps Script 데이터 서버 — 연결하면 모든 종목, 15초 간격 |
