@@ -7,7 +7,8 @@
 | --- | --- |
 | `index.html` | 웹앱 화면 (홈 화면에 추가해서 사용) |
 | `icon-180-v2.png`, `icon-512-v2.png`, `manifest.json` | 홈 화면 아이콘 |
-| `widget.js` | 아이폰 Scriptable 위젯 |
+| `widget.js` | 아이폰 Scriptable 위젯 로더 (처음 한 번만 붙여 넣기) |
+| `widget-core.js` | 위젯 본체 — 로더가 실행될 때마다 새로 받아 씀 (작은·중간·큰·잠금 화면) |
 | `fetch.cjs`, `watchlist.json` | GitHub Actions가 약 5분마다 `data` 브랜치의 `data.json`을 갱신 |
 | `Code.gs` | (선택) Apps Script 데이터 서버 — 연결하면 모든 종목, 15초 간격 |
 
