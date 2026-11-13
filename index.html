@@ -365,8 +365,9 @@ function renderIntra(d){
   const W = 340, H = 150, padL = 4, padR = 4, padT = 10, padB = 20;
   let mx = 1; pts.forEach(p => keys.forEach(k => { if(p[k[0]]!=null) mx = Math.max(mx, Math.abs(p[k[0]])); }));
   mx *= 1.1;
-  const t0 = Math.min(toMin(pts[0].t), 9*60), t1 = 15*60+30;
-  const X = t => padL + (toMin(t)-t0)/(t1-t0)*(W-padL-padR);
+  // 첫 자료 시각부터 그려서 앞쪽 빈칸이 생기지 않게 합니다(9시 전 자료가 있으면 9시부터).
+  const t0 = Math.min(Math.max(toMin(pts[0].t), 9*60), 15*60), t1 = 15*60+30;
+  const X = t => padL + (Math.max(toMin(t),t0)-t0)/(t1-t0)*(W-padL-padR);
   const Y = v => padT + (1 - (v+mx)/(2*mx))*(H-padT-padB);
   const lines = keys.map(k => {
     const dd = pts.filter(p=>p[k[0]]!=null).map((p,i) => (i?"L":"M")+X(p.t).toFixed(1)+" "+Y(p[k[0]]).toFixed(1)).join("");
@@ -374,7 +375,9 @@ function renderIntra(d){
     return '<path d="'+dd+'" fill="none" stroke="var('+k[2]+')" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>'
       + (lp[k[0]]!=null ? '<circle cx="'+X(lp.t).toFixed(1)+'" cy="'+Y(lp[k[0]]).toFixed(1)+'" r="3.2" fill="var('+k[2]+')"/>' : "");
   }).join("");
-  const ticks = [9*60, 11*60, 13*60, 15*60].filter(t => t>=t0 && t<=t1).map(t => {
+  const hrs = []; for(let h = Math.ceil(t0/60); h <= 15; h++) hrs.push(h*60);
+  const step = hrs.length > 4 ? 2 : 1;
+  const ticks = hrs.filter(t => (t/60 - 15) % step === 0).map(t => {
     const x = padL + (t-t0)/(t1-t0)*(W-padL-padR);
     return '<text x="'+x.toFixed(1)+'" y="'+(H-4)+'" font-size="10" fill="var(--faint)" text-anchor="'+(x<14?"start":x>W-14?"end":"middle")+'">'+(t/60)+'시</text>';
   }).join("");

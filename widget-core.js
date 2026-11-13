@@ -114,10 +114,10 @@ function lines(pts, w, h) {
     else cl.push(p);
   });
   pts = cl;
-  const t0 = Math.min(toMin(pts[0].t), 9 * 60), t1 = 15 * 60 + 30;
+  const t0 = Math.min(Math.max(toMin(pts[0].t), 9 * 60), 15 * 60), t1 = 15 * 60 + 30;
   let mx = 1; pts.forEach(p => INV.forEach(k => { if (p[k[1]] !== null && p[k[1]] !== undefined) mx = Math.max(mx, Math.abs(p[k[1]])); }));
   mx *= 1.12;
-  const X = t => 3 + ((toMin(t) - t0) / (t1 - t0)) * (w - 6), Y = v => 3 + (1 - (v + mx) / (2 * mx)) * (h - 6);
+  const X = t => 3 + ((Math.max(toMin(t), t0) - t0) / (t1 - t0)) * (w - 6), Y = v => 3 + (1 - (v + mx) / (2 * mx)) * (h - 6);
   dc.setFillColor(P.zero);
   for (let x = 0; x < w; x += 6) dc.fillRect(new Rect(x, Y(0) - 0.25, 3, 0.5));
   INV.forEach(k => {
