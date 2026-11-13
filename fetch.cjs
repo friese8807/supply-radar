@@ -25,6 +25,8 @@ function readPrev(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } ca
 function intraday(prevMarket, flow, hhmm) {
   let pts = prevMarket && prevMarket.flow && flow && prevMarket.flow.date === flow.date && Array.isArray(prevMarket.intraday) ? prevMarket.intraday.slice() : [];
   if (!flow) return pts;
+  // 마감 뒤(15:30 이후) 확정치는 15:30 점을 고쳐 씁니다 — 그래프가 저녁까지 늘어나지 않게.
+  if (hhmm > '15:30') hhmm = '15:30';
   const pt = { t: hhmm, p: flow.personal, f: flow.foreign, i: flow.institution };
   const last = pts[pts.length - 1];
   if (!last || last.p !== pt.p || last.f !== pt.f || last.i !== pt.i) {

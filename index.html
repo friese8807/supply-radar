@@ -344,7 +344,15 @@ function renderIntra(d){
   const box = $("intra");
   const m = d && (d.markets.find(x=>x.code===S.mk) || d.markets[0]);
   if(!m){ box.innerHTML = ""; return; }
-  const pts = (m.intraday||[]).filter(p => p && p.t);
+  const toMin = t => { const [h,mi] = String(t).split(":").map(Number); return h*60+mi; };
+  // 15:30 이후(마감 뒤 확정치)는 15:30 한 점으로 모아 그래프가 장 마감에서 끝나게 합니다.
+  let closed = false;
+  const pts = [];
+  (m.intraday||[]).filter(p => p && p.t).forEach(p => {
+    if(toMin(p.t) >= 15*60+30){ closed = true; const q = Object.assign({}, p, {t:"15:30"});
+      if(pts.length && pts[pts.length-1].t === "15:30") pts[pts.length-1] = q; else pts.push(q); }
+    else pts.push(p);
+  });
   const keys = [["f","외국인","--c-for"],["i","기관","--c-org"],["p","개인","--c-ind"]];
   const last = pts[pts.length-1] || (m.flow ? {p:m.flow.personal, f:m.flow.foreign, i:m.flow.institution} : null);
   const legend = '<div class="legend">'+keys.map(k => '<span><i style="background:var('+k[2]+')"></i>'+k[1]
@@ -357,8 +365,7 @@ function renderIntra(d){
   const W = 340, H = 150, padL = 4, padR = 4, padT = 10, padB = 20;
   let mx = 1; pts.forEach(p => keys.forEach(k => { if(p[k[0]]!=null) mx = Math.max(mx, Math.abs(p[k[0]])); }));
   mx *= 1.1;
-  const toMin = t => { const [h,mi] = t.split(":").map(Number); return h*60+mi; };
-  const t0 = Math.min(toMin(pts[0].t), 9*60), t1 = Math.max(toMin(pts[pts.length-1].t), 15*60+30);
+  const t0 = Math.min(toMin(pts[0].t), 9*60), t1 = 15*60+30;
   const X = t => padL + (toMin(t)-t0)/(t1-t0)*(W-padL-padR);
   const Y = v => padT + (1 - (v+mx)/(2*mx))*(H-padT-padB);
   const lines = keys.map(k => {
@@ -371,7 +378,7 @@ function renderIntra(d){
     const x = padL + (t-t0)/(t1-t0)*(W-padL-padR);
     return '<text x="'+x.toFixed(1)+'" y="'+(H-4)+'" font-size="10" fill="var(--faint)" text-anchor="'+(x<14?"start":x>W-14?"end":"middle")+'">'+(t/60)+'시</text>';
   }).join("");
-  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span style="font-size:13px;font-weight:700">'+esc(m.name)+' 장중 수급 흐름</span><small style="font-size:11.5px;color:var(--sub)">'+pts[pts.length-1].t+' 기준</small></div>'+legend
+  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span style="font-size:13px;font-weight:700">'+esc(m.name)+' 장중 수급 흐름</span><small style="font-size:11.5px;color:var(--sub)">'+(closed ? "장 마감" : pts[pts.length-1].t+" 기준")+'</small></div>'+legend
     + '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="장중 투자자별 순매수 추이">'
     + '<rect x="0" y="'+padT+'" width="'+W+'" height="'+(Y(0)-padT)+'" fill="var(--buy-soft)" opacity=".5"/>'
     + '<rect x="0" y="'+Y(0)+'" width="'+W+'" height="'+(H-padB-Y(0))+'" fill="var(--sell-soft)" opacity=".5"/>'

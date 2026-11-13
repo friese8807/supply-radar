@@ -107,7 +107,14 @@ function dailyBars(vals, w, h) {
 function lines(pts, w, h) {
   const dc = ctx(w, h);
   const toMin = t => { const [a, b] = t.split(":").map(Number); return a * 60 + b; };
-  const t0 = Math.min(toMin(pts[0].t), 9 * 60), t1 = Math.max(toMin(pts[pts.length - 1].t), 15 * 60 + 30);
+  // 15:30 이후(마감 뒤 확정치)는 15:30 한 점으로 모아 장 마감에서 끝나게 합니다.
+  const cl = [];
+  pts.forEach(p => {
+    if (toMin(p.t) >= 15 * 60 + 30) { const q = Object.assign({}, p, { t: "15:30" }); if (cl.length && cl[cl.length - 1].t === "15:30") cl[cl.length - 1] = q; else cl.push(q); }
+    else cl.push(p);
+  });
+  pts = cl;
+  const t0 = Math.min(toMin(pts[0].t), 9 * 60), t1 = 15 * 60 + 30;
   let mx = 1; pts.forEach(p => INV.forEach(k => { if (p[k[1]] !== null && p[k[1]] !== undefined) mx = Math.max(mx, Math.abs(p[k[1]])); }));
   mx *= 1.12;
   const X = t => 3 + ((toMin(t) - t0) / (t1 - t0)) * (w - 6), Y = v => 3 + (1 - (v + mx) / (2 * mx)) * (h - 6);
