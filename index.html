@@ -228,7 +228,8 @@ td .cp{display:block;font-size:11px;font-weight:600}
 <script>
 /* ===== 설정 ===== */
 const API_URL = "";
-const SNAPSHOT_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/data/data.json";
+const SNAPSHOT_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/data/data.json";   // 5분 캐시
+const SNAPSHOT_API = "https://api.github.com/repos/friese8807/supply-radar/contents/data.json?ref=data"; // 1분 캐시(시간당 60회 제한)
 const DEFAULT_WATCH = [{code:"005930",name:"삼성전자"},{code:"000660",name:"SK하이닉스"}];
 const WHO = ["foreign","organ","individual"];
 const LABEL = {foreign:"외국인", organ:"기관", individual:"개인"};
@@ -479,6 +480,11 @@ async function api(params){
   return r.json();
 }
 async function snapshot(){
+  // 더 새로운 쪽(GitHub API)을 먼저, 막히면 raw 주소로
+  try{
+    const a = await fetch(SNAPSHOT_API, {headers:{Accept:"application/vnd.github.raw"}, cache:"no-cache"});
+    if(a.ok) return await a.json();
+  }catch(e){}
   const r = await fetch(SNAPSHOT_URL+"?t="+Date.now(), {cache:"no-store"});
   if(!r.ok) throw new Error("HTTP "+r.status);
   return r.json();
@@ -501,7 +507,7 @@ async function load(){
     let ch = false;
     j.stocks.forEach(s => { const w = S.watch.find(x=>x.code===s.code); if(w && s.name && w.name!==s.name){ w.name = s.name; ch = true; } });
     if(ch) store.set("watch", S.watch);
-    setStatus(j.snapshot ? hhmm(S.lastOk)+" 갱신 · 약 5분 간격" : hhmmss(S.lastOk)+" 갱신");
+    setStatus(j.snapshot ? hhmm(S.lastOk)+" 갱신" + (j.markets.some(m=>m.status==="OPEN") ? " · 1~2분 간격" : "") : hhmmss(S.lastOk)+" 갱신");
   }catch(e){
     setStatus(S.lastOk ? "연결 불안정 · "+hhmm(S.lastOk)+" 기준" : "불러오지 못했어요");
     if(!S.data){ $("warn").hidden = false; $("warn").textContent = (S.api ? "데이터 서버에 연결하지 못했습니다. 주소와 배포 권한(모든 사용자)을 확인해 주세요." : "자료를 받지 못했습니다. 잠시 뒤 다시 열어 주세요.")+" ("+e.message+")"; }
@@ -515,7 +521,7 @@ function schedule(){
   clearTimeout(S.timer);
   if(S.demo || document.hidden) return;
   const open = S.data && S.data.markets.some(m=>m.status==="OPEN");
-  S.timer = setTimeout(load, !S.api ? 60000 : open ? 15000 : 120000);
+  S.timer = setTimeout(load, !S.api ? (open ? 90000 : 300000) : open ? 15000 : 120000);
 }
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); else clearTimeout(S.timer); });
 addEventListener("scroll", () => $("top").classList.toggle("scrolled", scrollY>4), {passive:true});
