@@ -500,6 +500,27 @@ async function snapshot(){
   return r.json();
 }
 
+/* 장중 흐름 합치기: GitHub 자료(같은 날짜만) + 앱이 직접 받은 값(휴대폰에 저장) + 지금 값.
+   GitHub 예약 실행이 빠지는 날에도 앱을 열어 둔 동안은 그래프가 이어지고, 어제 그래프가 남지 않게 합니다. */
+function kstNow(){ const d = new Date(Date.now()+9*3600e3); return {date:d.toISOString().slice(0,10).replace(/-/g,""), t:d.toISOString().slice(11,16)}; }
+function mergeIntra(m, o){
+  const f = m.flow; if(!f || !f.date){ m.intraday = []; return; }
+  const all = store.get("intra", {});
+  if(all.date !== f.date){ all.date = f.date; all.m = {}; }
+  const by = {};
+  (all.m[m.code]||[]).forEach(p => by[p.t] = p);
+  if(o && o.flow && o.flow.date === f.date) (o.intraday||[]).forEach(p => { if(p && p.t) by[p.t] = p; });
+  const now = kstNow();
+  if(now.date === f.date && now.t >= "09:00"){
+    const t = now.t > "15:30" ? "15:30" : now.t;
+    by[t] = {t, p:f.personal, f:f.foreign, i:f.institution};
+  }
+  const pts = Object.keys(by).sort().map(k => by[k]);
+  all.m[m.code] = pts.slice(-400);
+  store.set("intra", all);
+  m.intraday = pts;
+}
+
 async function load(){
   if(S.loading) return;
   if(S.demo){ S.data = demoData(); S.lastOk = new Date(); setStatus("예시 화면"); render(); return; }
@@ -510,7 +531,8 @@ async function load(){
       const [a, b] = await Promise.allSettled([api({action:"all", codes:S.watch.map(w=>w.code).join(",")}), snapshot()]);
       if(a.status!=="fulfilled") throw a.reason;
       j = a.value;
-      if(b.status==="fulfilled" && b.value && b.value.markets) j.markets.forEach(m => { const o = b.value.markets.find(x=>x.code===m.code); if(o && o.intraday) m.intraday = o.intraday; });
+      const snap = b.status==="fulfilled" && b.value && b.value.markets ? b.value.markets : [];
+      j.markets.forEach(m => mergeIntra(m, snap.find(x=>x.code===m.code)));
     } else j = await snapshot();
     if(!j.ok) throw new Error(j.error||"응답 오류");
     S.data = j; S.lastOk = j.snapshot ? new Date(j.ts) : new Date();
