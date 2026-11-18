@@ -7,6 +7,10 @@
  *   ?action=all&codes=005930,000660   시장(코스피·코스닥) + 관심종목
  *   ?action=search&q=삼성             종목 검색
  *   ?action=debug&codes=005930        원본 응답 일부 확인(문제 생겼을 때)
+ *
+ * 장중 수급 흐름 기록(그래프용): 편집기에서 setup 함수를 한 번 실행하면
+ * 1분마다 recordFlow 가 돌면서 코스피·코스닥 투자자별 순매수를 저장합니다.
+ * (GitHub 예약 실행은 몇 시간씩 늦거나 빠지는 날이 있어 그래프가 비는 문제를 막습니다)
  */
 
 var UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
@@ -75,7 +79,8 @@ function all_(codes) {
     }
     if (!flow) errors.push(m.name + ' 투자자 동향을 받지 못했습니다');
     var q = pickQuote(rt, 0) || {};
-    return { code: m.code, name: m.name, price: q.price, change: q.change, pct: q.pct, status: q.status, tradedAt: q.tradedAt, flow: flow };
+    return { code: m.code, name: m.name, price: q.price, change: q.change, pct: q.pct, status: q.status, tradedAt: q.tradedAt, flow: flow,
+      intraday: flow ? readIntra_(m.code, flow.date) : [] };
   });
 
   var rtStocks = codes.length ? res[i++] : null;
@@ -89,6 +94,59 @@ function all_(codes) {
   var out = { ok: true, ts: new Date().toISOString(), markets: markets, stocks: stocks, errors: errors };
   try { cache.put(key, JSON.stringify(out), CACHE_SEC); } catch (err) {}
   return out;
+}
+
+/* ---------- 장중 흐름 기록 (1분마다) ---------- */
+
+/** 편집기에서 한 번 실행: 1분마다 기록하는 트리거를 설치합니다(중복 설치 안 함). */
+function setup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'recordFlow') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('recordFlow').timeBased().everyMinutes(1).create();
+  recordFlow();
+  Logger.log('설치 완료: 장중(평일 09:00~15:35) 1분마다 기록합니다.');
+}
+
+function kst_() {
+  var d = new Date(Date.now() + 9 * 3600e3);
+  return { date: d.toISOString().slice(0, 10).replace(/-/g, ''), t: d.toISOString().slice(11, 16), dow: d.getUTCDay() };
+}
+
+function recordFlow() {
+  var now = kst_();
+  if (now.dow === 0 || now.dow === 6 || now.t < '09:00' || now.t > '15:35') return;
+  var t = now.t > '15:30' ? '15:30' : now.t;
+  var props = PropertiesService.getScriptProperties();
+  var res = UrlFetchApp.fetchAll(MARKETS.map(function (m) {
+    return req_('https://m.stock.naver.com/api/index/' + m.code + '/integration');
+  })).map(parse_);
+  MARKETS.forEach(function (m, k) {
+    var f = pickFlow(res[k]);
+    if (!f || f.date !== now.date) return;
+    // 시간대(시)별로 나눠 저장: 값 하나 9KB 제한 대비. 형식 "HH:MM,개인,외국인,기관;"
+    var key = 'i:' + m.code + ':' + now.date + ':' + t.slice(0, 2);
+    var rows = (props.getProperty(key) || '').split(';').filter(function (r) { return r && r.slice(0, 5) !== t; });
+    rows.push([t, f.personal, f.foreign, f.institution].join(','));
+    props.setProperty(key, rows.join(';'));
+  });
+  // 지난 날짜 정리
+  var all = props.getKeys();
+  all.forEach(function (k) { if (k.indexOf('i:') === 0 && k.split(':')[2] !== now.date) props.deleteProperty(k); });
+}
+
+function readIntra_(code, date) {
+  try {
+    var props = PropertiesService.getScriptProperties().getProperties();
+    var pts = [];
+    Object.keys(props).filter(function (k) { return k.indexOf('i:' + code + ':' + date + ':') === 0; }).sort().forEach(function (k) {
+      props[k].split(';').forEach(function (r) {
+        var a = r.split(',');
+        if (a.length === 4) pts.push({ t: a[0], p: num(a[1]), f: num(a[2]), i: num(a[3]) });
+      });
+    });
+    return pts.sort(function (x, y) { return x.t < y.t ? -1 : x.t > y.t ? 1 : 0; });
+  } catch (err) { return []; }
 }
 
 function search_(q) {

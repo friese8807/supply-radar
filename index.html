@@ -508,7 +508,9 @@ function mergeIntra(m, o){
   const all = store.get("intra", {});
   if(all.date !== f.date){ all.date = f.date; all.m = {}; }
   const by = {};
+  const fromServer = m.intraday || [];   // 데이터 서버(Apps Script)가 1분마다 기록한 값
   (all.m[m.code]||[]).forEach(p => by[p.t] = p);
+  fromServer.forEach(p => { if(p && p.t) by[p.t] = p; });
   if(o && o.flow && o.flow.date === f.date) (o.intraday||[]).forEach(p => { if(p && p.t) by[p.t] = p; });
   const now = kstNow();
   if(now.date === f.date && now.t >= "09:00"){
