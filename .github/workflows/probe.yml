@@ -1,0 +1,16 @@
+name: probe
+on: { push: { branches: [probe-naver] } }
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
+          D=$(TZ=Asia/Seoul date +%Y%m%d)
+          for s in 01 02; do
+            echo "=== html sosok=$s"
+            curl -s -A "$UA" "https://finance.naver.com/sise/investorDealTrendTime.naver?bizdate=$D&sosok=$s&page=1" | iconv -f euc-kr -t utf-8 | sed 's/<[^>]*>/ /g' | tr -s ' \t\r' ' ' | grep -v '^ *$' | head -45
+          done
+          for u in "https://m.stock.naver.com/api/index/KOSPI/investorTrend" "https://m.stock.naver.com/api/index/KOSPI/trend/time" "https://m.stock.naver.com/api/index/KOSPI/dealTrend/time" "https://m.stock.naver.com/front-api/index/investorTrendByTime?code=KOSPI"; do
+            echo "=== $u"; curl -s -A "$UA" -w "\nHTTP %{http_code}\n" "$u" | head -c 600; echo
+          done
