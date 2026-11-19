@@ -1,7 +1,7 @@
 name: 수급 레이더 데이터
 
-# 장중에는 한 번 시작되면 장 마감(15:45)까지 1분마다 수급을 받아 data 브랜치에 올립니다.
-# GitHub 예약 실행이 늦거나 빠질 수 있어 시작 시각을 여러 번 걸어 두었습니다(이미 돌고 있으면 기다렸다가 짧게 끝남).
+# 장중(평일 08:50~15:45)에는 1분마다 수급을 받아 data 브랜치에 올립니다.
+# 실행이 끝날 때마다 다음 실행을 스스로 걸어 계속 이어집니다. 아래 예약은 이어짐이 끊겼을 때 다시 살리는 예비용입니다.
 on:
   schedule:
     - cron: '50 23 * * 0-4'   # 08:50 KST
@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # 다음 실행을 스스로 걸기 위해
 
 concurrency:
   group: supply-radar
@@ -33,23 +34,42 @@ jobs:
           node-version: 20
       - name: 이전 데이터 받기 (장중 흐름 이어 쌓기)
         run: git fetch --depth 1 origin data && git show FETCH_HEAD:data.json > prev.json || echo '{}' > prev.json
-      - name: 장 마감까지 1분마다 받아서 올리기
+      - name: 1분마다 받아서 올리기 + 다음 실행 이어 걸기
         env:
           TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          start=$(date +%s)
-          stop=$(TZ=Asia/Seoul date -d '15:45' +%s)
-          limit=$((start + 345*60))
-          [ "$limit" -lt "$stop" ] && stop=$limit
+          # GitHub 예약 실행은 몇 시간씩 늦거나 빠지는 날이 많아서, 실행 하나가 끝날 때 다음 실행을 직접 걸어
+          # 쉬지 않고 이어지게 합니다. 장이 없을 때는 다음 평일 08:50까지 기다리기만 합니다(공개 저장소라 무료).
+          K() { TZ=Asia/Seoul date "$@"; }
           mkdir -p out
-          while :; do
+          fetch_once() {
             if node fetch.cjs out prev.json; then
               cp out/data.json prev.json
               ( cd out && rm -rf .git && git init -q -b data && git add data.json \
                 && git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "data $(date -u +%FT%TZ)" \
                 && git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" data ) || echo "올리기 실패, 다음 회차에 다시"
             fi
-            [ "$(date +%s)" -ge "$stop" ] && break
-            sleep 55
+          }
+          now=$(date +%s); deadline=$((now + 335*60))
+          fetch_once   # 마감 뒤 확정치도 이걸로 갱신
+          # 다음 장 시작(오늘 장중이면 지금)
+          day=""
+          for d in 0 1 2 3 4 5 6; do
+            dd=$(K -d "+$d day" +%F)
+            [ "$(K -d "$dd" +%u)" -le 5 ] || continue
+            [ "$(K -d "$dd 15:45" +%s)" -gt "$now" ] && { day=$dd; break; }
           done
+          start=$(K -d "$day 08:50" +%s); stop=$(K -d "$day 15:45" +%s)
+          [ "$start" -lt "$now" ] && start=$now
+          [ "$stop" -gt "$deadline" ] && stop=$deadline
+          echo "다음 장: $day, 시작 $(K -d @$start +%T), 끝 $(K -d @$stop +%T)"
+          if [ "$start" -lt "$deadline" ]; then
+            [ "$start" -gt "$(date +%s)" ] && sleep $((start - $(date +%s)))
+            while [ "$(date +%s)" -lt "$stop" ]; do fetch_once; sleep 55; done
+            fetch_once
+          else
+            sleep $((deadline - $(date +%s)))
+          fi
+          gh workflow run data.yml -R "$REPO" --ref main && echo "다음 실행을 걸었습니다"
