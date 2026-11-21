@@ -20,7 +20,7 @@ jobs:
             "https://polling.finance.naver.com/api/realtime/domestic/stock/$C" \
             "https://m.stock.naver.com/api/stock/$C/trend?pageSize=3" ; do
             echo "=================== $u"
-            curl -s -D /tmp/h -o /tmp/b -A "$UA" -H 'Origin: https://friese8807.github.io' -H 'Referer: https://m.stock.naver.com/' "$u"
+            curl -s -D /tmp/h -o /tmp/b -A "$UA" -H 'Referer: https://m.stock.naver.com/' "$u"
             grep -i "^HTTP\|access-control-allow-origin\|content-type" /tmp/h | tr -d '\r'
-            head -c 2500 /tmp/b; echo
+            head -c 6000 /tmp/b; echo
           done
