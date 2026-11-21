@@ -225,7 +225,7 @@ td .cp{display:block;font-size:11px;font-weight:600}
 .sd-52b i{position:absolute;top:-4px;width:16px;height:16px;border-radius:50%;background:var(--ink);border:3px solid var(--bg);transform:translateX(-50%)}
 .sd-52l{display:flex;justify-content:space-between;font-size:12px;color:var(--sub)}.sd-52 small{display:block;text-align:center;font-size:12px;color:var(--sub);margin-top:4px}
 .sd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.sd-grid div{background:var(--card);border-radius:12px;padding:9px 10px;box-shadow:0 0 0 1px var(--line);min-width:0}
-.sd-grid small{display:block;color:var(--sub);font-size:11.5px}.sd-grid b{display:block;font-size:14.5px;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sd-grid em{font-style:normal;font-size:10.5px;color:var(--faint)}
+.sd-grid small{display:block;color:var(--sub);font-size:11.5px}.sd-grid b{display:block;font-size:14px;font-variant-numeric:tabular-nums;margin-top:2px;word-break:keep-all;line-height:1.3}.sd-grid em{font-style:normal;font-size:10.5px;color:var(--faint)}
 .sd-sum{display:flex;gap:12px;font-size:13px;margin-bottom:8px;flex-wrap:wrap}.sd-sum span{color:var(--sub)}.sd-sum b{margin-left:3px}
 .sd-t{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}.sd-t th{color:var(--sub);font-weight:600;font-size:11.5px;text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);white-space:nowrap}.sd-t th:first-child{text-align:left}
 .sd-t td{text-align:right;padding:7px 4px;border-bottom:1px solid var(--line);white-space:nowrap}.sd-t td:first-child{text-align:left;color:var(--sub)}
@@ -704,6 +704,7 @@ const SD = {code:null, d:null, err:"", period:store.get("sdPer","3M"), tab:store
 const sdWon = n => n==null ? "-" : Math.round(n).toLocaleString("ko-KR");
 const sdPct = r => (r>0?"+":"")+(r||0).toFixed(2)+"%";
 const sdEok = v => v==null ? "-" : eok(v);
+const sdTxt = t => String(t==null?"":t).replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 const sdD = s => (+String(s).slice(4,6))+"/"+(+String(s).slice(6,8));
 function sdInfo(k){ const x = SD.d && (SD.d.info||[]).find(a => a[0]===k); return x ? x[1] : null; }
 function sdInfoN(k){ const v = sdInfo(k); if(v==null) return null; const n = parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isFinite(n) ? n : null; }
@@ -801,8 +802,8 @@ function sdFin(){
 }
 function sdNews(){
   const t = s => (+s.slice(4,6))+"/"+(+s.slice(6,8))+" "+s.slice(8,10)+":"+s.slice(10,12);
-  const res = (SD.d.res||[]).map(x => '<a class="sd-li" href="https://m.stock.naver.com/research/company/'+x[3]+'" target="_blank" rel="noopener"><b>'+esc(x[0])+'</b><small>'+esc(x[1])+' · '+sdD(x[2])+'</small></a>').join("");
-  const nw = (SD.d.news||[]).map(x => '<a class="sd-li" href="'+esc(x[3])+'" target="_blank" rel="noopener"><b>'+esc(x[0])+'</b><small>'+esc(x[1])+' · '+t(String(x[2]))+'</small></a>').join("");
+  const res = (SD.d.res||[]).map(x => '<a class="sd-li" href="https://m.stock.naver.com/research/company/'+x[3]+'" target="_blank" rel="noopener"><b>'+esc(sdTxt(x[0]))+'</b><small>'+esc(x[1])+' · '+sdD(x[2])+'</small></a>').join("");
+  const nw = (SD.d.news||[]).map(x => '<a class="sd-li" href="'+esc(x[3])+'" target="_blank" rel="noopener"><b>'+esc(sdTxt(x[0]))+'</b><small>'+esc(x[1])+' · '+t(String(x[2]))+'</small></a>').join("");
   return '<h4 class="sd-h4">뉴스</h4>'+(nw || '<div class="sd-empty">최근 뉴스가 없어요</div>')+'<h4 class="sd-h4">증권사 리포트</h4>'+(res || '<div class="sd-empty">최근 리포트가 없어요</div>');
 }
 function sdPeer(){
