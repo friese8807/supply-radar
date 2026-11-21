@@ -58,8 +58,19 @@ jobs:
                 && git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" data ) || echo "올리기 실패, 다음 회차에 다시"
             fi
           }
+          # 종목 상세(지표·차트·실적·수급·뉴스) — 시장 지도 종목 전부, detail 브랜치에 올림(약 20초)
+          last_detail=0
+          push_detail() {
+            [ -f prevmap.json ] || return 0
+            rm -rf outd && node detail.cjs outd prevmap.json \
+              && ( cd outd && git init -q -b detail && git add -A \
+                && git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "detail $(date -u +%FT%TZ)" \
+                && git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" detail ) || echo "상세 자료 올리기 실패, 다음 회차에 다시"
+            last_detail=$(date +%s)
+          }
           now=$(date +%s); deadline=$((now + 335*60))
           fetch_once   # 마감 뒤 확정치도 이걸로 갱신
+          push_detail
           # 다음 장 시작(오늘 장중이면 지금)
           day=""
           for d in 0 1 2 3 4 5 6; do
@@ -73,8 +84,13 @@ jobs:
           echo "다음 장: $day, 시작 $(K -d @$start +%T), 끝 $(K -d @$stop +%T)"
           if [ "$start" -lt "$deadline" ]; then
             [ "$start" -gt "$(date +%s)" ] && sleep $((start - $(date +%s)))
-            while [ "$(date +%s)" -lt "$stop" ]; do fetch_once; sleep 55; done
+            while [ "$(date +%s)" -lt "$stop" ]; do
+              fetch_once
+              [ $(( $(date +%s) - last_detail )) -ge 1800 ] && push_detail   # 장중 30분마다
+              sleep 55
+            done
             fetch_once
+            push_detail   # 마감 뒤 한 번 더
           else
             sleep $((deadline - $(date +%s)))
           fi
