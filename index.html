@@ -182,9 +182,10 @@ td .cp{display:block;font-size:11px;font-weight:600}
 .ph{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:4px;height:24px;padding:5px 9px 0;font-size:12px;text-align:left}
 .ph span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--sub);font-weight:600}
 .ph b{font-variant-numeric:tabular-nums}.ph em{font-style:normal;color:var(--faint)}
-.pt{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;line-height:1.18;padding:1px}
-.pt b{font-weight:700;white-space:nowrap;letter-spacing:-.03em}.pt i{font-style:normal;font-variant-numeric:tabular-nums;opacity:.85}
-.pt.on{box-shadow:0 0 0 2px var(--ink)}
+.pa{position:absolute;overflow:hidden;border-radius:10px;background:#1b1e24}
+.pt{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;line-height:1.15;padding:1px;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.35)}
+.pt b{font-weight:700;white-space:nowrap;letter-spacing:-.03em}.pt i{font-style:normal;font-variant-numeric:tabular-nums;opacity:.92}
+.pt.on{box-shadow:inset 0 0 0 2.5px #fff}
 .tm-sel{font-size:13.5px;margin:0 2px 10px;text-align:center;min-height:20px;word-break:keep-all}.tm-sel small{color:var(--sub)}
 .tm-leg{display:flex;align-items:center;gap:6px;justify-content:center;font-size:11px;color:var(--sub);margin-top:8px}
 .tm-leg i{width:70px;height:8px;border-radius:4px}
@@ -521,14 +522,11 @@ const TM_SHORT = {"반도체와반도체장비":"반도체","전자장비와기�
 const tmName = s => TM_SHORT[s] || s;
 const darkQ = matchMedia("(prefers-color-scheme: dark)");
 function tmShade(r){
-  const P = darkQ.matches
-    ? {neu:[44,48,56], up:[[96,48,52],[176,52,56]], dn:[[42,58,98],[52,98,206]], ink:"#eef0f4"}
-    : {neu:[240,241,243], up:[[251,214,211],[226,82,78]], dn:[[214,226,250],[64,112,222]], ink:"#2a2d33"};
+  /* 진한 색: 0%는 짙은 회색, 오를수록 빨강→진한 빨강, 내릴수록 파랑→진한 파랑 (±5%에서 가장 진함) */
+  const NEU = [86,91,101], UP = [[229,72,77],[150,18,24]], DN = [[58,110,232],[18,48,140]];
   const mix = (a,b,t) => a.map((v,i)=>Math.round(v+(b[i]-v)*t));
-  const t = Math.min(Math.abs(r||0)/TM_CAP, 1), side = r>0 ? P.up : P.dn;
-  if(t < .02) return {bg:"rgb("+P.neu+")", fg:P.ink};
-  const c = t<.35 ? mix(P.neu, side[0], t/.35) : mix(side[0], side[1], (t-.35)/.65);
-  return {bg:"rgb("+c+")", fg:(!darkQ.matches && t > .62) ? "#fff" : P.ink};
+  const t = Math.min(Math.abs(r||0)/TM_CAP, 1), side = r>0 ? UP : DN;
+  return {bg:"rgb("+(t<.5 ? mix(NEU, side[0], t/.5) : mix(side[0], side[1], (t-.5)/.5))+")", fg:"#fff"};
 }
 /* 정사각형에 가깝게 나누기(squarified treemap) */
 function squarify(items, x, y, w, h){
@@ -552,15 +550,21 @@ function tmSectors(list){
   list.forEach(x => { const g = by[x.s] = by[x.s] || {s:x.s, v:0, mr:0, items:[]}; g.v += x.m; g.mr += x.m*x.r; g.items.push(x); });
   return Object.values(by).map(g => (g.r = g.mr/g.v, g)).sort((a,b)=>b.v-a.v);
 }
-function tmTile(r, sector){
-  const G = 1.5, x = r.x+G, y = r.y+G, w = r.w-2*G, h = r.h-2*G; if(w < 2 || h < 2) return "";
-  const it = r.it, c = tmShade(it.r), rad = Math.min(8, w/4, h/4);
-  const fs = Math.min(Math.max(9, Math.min(16, Math.sqrt(w*h)/5.4)), (w-6)/(it.n.length*1.02));
+function tmTile(r, sector, ox, oy){
+  const x = r.x-(ox||0), y = r.y-(oy||0), w = r.w, h = r.h; if(w < 1 || h < 1) return "";
+  const it = r.it, c = tmShade(it.r);
+  const fs = Math.min(Math.max(9, Math.min(17, Math.sqrt(w*h)/5.2)), (w-4)/(it.n.length*1.02));
   let inner = "";
   /* 이름이 다 들어갈 때만 쓰고(잘린 이름은 뜻이 사라짐), 높이가 되면 등락률도 */
-  if(fs >= 8.5 && h >= 18){ inner = '<b style="font-size:'+fs.toFixed(1)+'px">'+esc(it.n)+'</b>'; if(h >= fs*2.7) inner += '<i style="font-size:'+Math.max(8.5,fs*.8).toFixed(1)+'px">'+tmPct(it.r)+(sector && h >= fs*4 ? '<br>'+tmCap(it.v) : '')+'</i>'; }
+  if(fs >= 8 && h >= 16){ inner = '<b style="font-size:'+fs.toFixed(1)+'px">'+esc(it.n)+'</b>'; if(h >= fs*2.6) inner += '<i style="font-size:'+(fs*.82).toFixed(1)+'px">'+tmPct(it.r)+(sector && h >= fs*4 ? '<br>'+tmCap(it.v) : '')+'</i>'; }
   const on = sector ? S.tmSec===it.c : S.tmPick===it.c;
-  return '<button class="pt'+(on?" on":"")+'" '+(sector?'data-tms':'data-tm')+'="'+esc(it.c)+'" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px;border-radius:'+rad.toFixed(1)+'px;background:'+c.bg+';color:'+c.fg+'" aria-label="'+esc(it.n+" "+tmPct(it.r))+'">'+inner+'</button>';
+  return '<button class="pt'+(on?" on":"")+'" '+(sector?'data-tms':'data-tm')+'="'+esc(it.c)+'" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px;background:'+c.bg+'" aria-label="'+esc(it.n+" "+tmPct(it.r))+'">'+inner+'</button>';
+}
+/* 상자 묶음: 모서리만 둥글게 잘라 그 안에 상자를 틈 없이 붙임 */
+function tmGroup(items, x, y, w, h, sector){
+  if(w < 2 || h < 2) return "";
+  return '<div class="pa" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px">'
+    + squarify(items, x, y, w, h).map(r => tmTile(r, sector, x, y)).join("") + '</div>';
 }
 function tmCard(g, x, y, w, h, n){
   if(w < 16 || h < 16) return "";
@@ -570,7 +574,7 @@ function tmCard(g, x, y, w, h, n){
   let html = '<div class="pc" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px">'
     + (HEAD ? '<button class="ph" data-tms="'+esc(g.s)+'"><span>'+esc(tmName(g.s))+(wide ? ' <small style="color:var(--faint);font-weight:500">'+g.items.length+'종목 · '+tmCap(g.v)+'</small>' : '')+'</span>'
       + (mid ? '<b style="color:'+col+'">'+tmPct(g.r)+'</b><em>›</em>' : '')+'</button>' : '') + '</div>';
-  squarify(g.items.slice(0, n||24).map(x => ({v:x.m, c:x.c, n:x.n, r:x.r})), x+3, y+3+HEAD, w-6, h-6-HEAD).forEach(r => html += tmTile(r));
+  html += tmGroup(g.items.slice(0, n||24).map(x => ({v:x.m, c:x.c, n:x.n, r:x.r})), x+3, y+3+HEAD, w-6, h-6-HEAD);
   return html;
 }
 function renderMap(){
@@ -594,7 +598,7 @@ function renderMap(){
   } else if(S.tmView === "C"){
     /* C 업종: 업종 상자만 → 누른 업종이 아래에 펼쳐짐 */
     const top = Math.round(W*.8), sel = secs.find(g => g.s===S.tmSec) || secs[0];
-    squarify(secs.map(g => ({v:g.v, c:g.s, n:tmName(g.s), r:g.r})), 0, 0, W, top).forEach(r => html += tmTile(Object.assign(r, {it:Object.assign(r.it, {v:r.it.v})}), true));
+    html += tmGroup(secs.map(g => ({v:g.v, c:g.s, n:tmName(g.s), r:g.r})), 0, 0, W, top, true);
     if(!S.tmSec) S.tmSec = sel.s;
     const ch = Math.round(W*.75);
     html += tmCard(sel, 0, top+12, W, ch, 40);
