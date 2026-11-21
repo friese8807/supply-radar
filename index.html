@@ -582,7 +582,7 @@ function renderMap(){
   const more = secs.length - 8;
   $("tmMore").hidden = more <= 0; $("tmMore").textContent = S.tmAll ? "접기" : "업종 "+more+"개 더 보기";
   const t = new Date(S.map.ts), open = S.map.status === "OPEN";
-  $("tmDate").textContent = (open ? "장중 · "+hhmm(t) : md(t.toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,""))+" 마감")+" · 상위 "+list.length+"종목";
+  $("tmDate").textContent = (open ? "장중 · "+hhmm(t) : md(S.map.date || (S.data && (S.data.markets.find(m=>m.flow)||{flow:{}}).flow.date) || t.toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,""))+" 마감")+" · 상위 "+list.length+"종목";
   const pick = list.find(x => x.c===S.tmPick), g0 = S.tmSec && secs.find(g => g.s===S.tmSec);
   $("tmSel").innerHTML = pick
     ? '<b>'+esc(pick.n)+'</b> '+(pick.p!=null ? Math.round(pick.p).toLocaleString("ko-KR")+'원 ' : '')+'<span class="'+tone(pick.r)+'">'+tmPct(pick.r)+'</span> <small>시총 '+tmCap(pick.m)+' · '+esc(tmName(pick.s))+'</small>'

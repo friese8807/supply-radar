@@ -122,7 +122,7 @@ if (require.main === module) (async () => {
     const secs = await sectorMap(readPrev(path.join(dir, 'prevsec.json')), today);
     const mm = await marketMap(secs);
     const pm = readPrev(path.join(dir, 'prevmap.json'));
-    const map = { ts: new Date().toISOString(), status: (markets[0] && markets[0].status) || '', markets: Object.assign({}, pm && pm.markets, mm) };
+    const map = { ts: new Date().toISOString(), date: (markets.find(x => x.flow && x.flow.date) || {flow:{}}).flow.date || '', status: (markets[0] && markets[0].status) || '', markets: Object.assign({}, pm && pm.markets, mm) };
     if (secs) fs.writeFileSync(path.join(process.argv[2] || 'out', 'sectors.json'), JSON.stringify(secs));
     if (Object.keys(mm).length) fs.writeFileSync(path.join(process.argv[2] || 'out', 'map.json'), JSON.stringify(map));
     console.log('map', Object.entries(mm).map(([k, v]) => k + ':' + v.length).join(' '));
