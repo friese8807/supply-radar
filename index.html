@@ -174,7 +174,8 @@ td .cp{display:block;font-size:11px;font-weight:600}
 @media (prefers-reduced-motion:reduce){.spin,.dot.live{animation:none}.sheet,.dim{transition:none}}
 
 /* 시장 지도 (업종 카드형 트리맵) */
-.tm-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 10px}
+.tm-tools{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:0 0 10px;flex-wrap:wrap}
+.tm-tools .seg button{padding:0 9px;font-size:12.5px}
 .tm-tools small{font-size:12px;color:var(--sub)}
 .tm{position:relative}
 .pc{position:absolute;background:var(--card);border-radius:14px;box-shadow:0 0 0 1px var(--line),var(--shadow)}
@@ -187,6 +188,7 @@ td .cp{display:block;font-size:11px;font-weight:600}
 .tm-sel{font-size:13.5px;margin:0 2px 10px;text-align:center;min-height:20px;word-break:keep-all}.tm-sel small{color:var(--sub)}
 .tm-leg{display:flex;align-items:center;gap:6px;justify-content:center;font-size:11px;color:var(--sub);margin-top:8px}
 .tm-leg i{width:70px;height:8px;border-radius:4px}
+.tm-more[hidden]{display:none}
 .tm-more{display:block;width:100%;margin-top:10px;padding:11px;border-radius:12px;background:var(--soft);font-size:14px;font-weight:600;color:var(--sub)}
 .tm-empty{padding:28px 10px;text-align:center;color:var(--sub);font-size:13.5px;word-break:keep-all;text-wrap:balance}
 </style>
@@ -210,7 +212,7 @@ td .cp{display:block;font-size:11px;font-weight:600}
   </section>
   <section class="sec" id="tmSec">
     <div class="sec-h"><h2>시장 지도</h2><small id="tmDate"></small></div>
-    <div class="tm-tools"><div class="seg" id="segTm"><button data-tmk="KOSPI">코스피</button><button data-tmk="KOSDAQ">코스닥</button></div><small>상자 크기 = 시가총액</small></div>
+    <div class="tm-tools"><div class="seg" id="segTm"><button data-tmk="KOSPI">코스피</button><button data-tmk="KOSDAQ">코스닥</button></div><div class="seg" id="segTv"><button data-tmv="A">A 한눈에</button><button data-tmv="B">B 세로</button><button data-tmv="C">C 업종</button></div></div>
     <div class="tm-sel" id="tmSel"></div>
     <div class="tm" id="tm"></div>
     <div class="tm-leg" id="tmLeg"></div>
@@ -276,6 +278,7 @@ const S = {
   mode: store.get("mode","daily"),    // daily | cum
   mk: store.get("mk","KOSPI"),
   tmk: store.get("tmk","KOSPI"),     // 시장 지도: KOSPI | KOSDAQ
+  tmView: store.get("tmView","B"),  // 시장 지도 보기: A 한눈에 | B 세로 | C 업종
   tmAll: false, tmPick: null, map: null, mapAt: 0,
   demo: false, data: null, loading: false, timer: null, lastOk: null
 };
@@ -549,19 +552,25 @@ function tmSectors(list){
   list.forEach(x => { const g = by[x.s] = by[x.s] || {s:x.s, v:0, mr:0, items:[]}; g.v += x.m; g.mr += x.m*x.r; g.items.push(x); });
   return Object.values(by).map(g => (g.r = g.mr/g.v, g)).sort((a,b)=>b.v-a.v);
 }
-function tmTile(r){
+function tmTile(r, sector){
   const G = 1.5, x = r.x+G, y = r.y+G, w = r.w-2*G, h = r.h-2*G; if(w < 2 || h < 2) return "";
   const it = r.it, c = tmShade(it.r), rad = Math.min(8, w/4, h/4);
   const fs = Math.min(Math.max(9, Math.min(16, Math.sqrt(w*h)/5.4)), (w-6)/(it.n.length*1.02));
   let inner = "";
   /* 이름이 다 들어갈 때만 쓰고(잘린 이름은 뜻이 사라짐), 높이가 되면 등락률도 */
-  if(fs >= 8.5 && h >= 18){ inner = '<b style="font-size:'+fs.toFixed(1)+'px">'+esc(it.n)+'</b>'; if(h >= fs*2.7) inner += '<i style="font-size:'+Math.max(8.5,fs*.8).toFixed(1)+'px">'+tmPct(it.r)+'</i>'; }
-  return '<button class="pt'+(S.tmPick===it.c?" on":"")+'" data-tm="'+it.c+'" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px;border-radius:'+rad.toFixed(1)+'px;background:'+c.bg+';color:'+c.fg+'" aria-label="'+esc(it.n+" "+tmPct(it.r))+'">'+inner+'</button>';
+  if(fs >= 8.5 && h >= 18){ inner = '<b style="font-size:'+fs.toFixed(1)+'px">'+esc(it.n)+'</b>'; if(h >= fs*2.7) inner += '<i style="font-size:'+Math.max(8.5,fs*.8).toFixed(1)+'px">'+tmPct(it.r)+(sector && h >= fs*4 ? '<br>'+tmCap(it.v) : '')+'</i>'; }
+  const on = sector ? S.tmSec===it.c : S.tmPick===it.c;
+  return '<button class="pt'+(on?" on":"")+'" '+(sector?'data-tms':'data-tm')+'="'+esc(it.c)+'" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px;border-radius:'+rad.toFixed(1)+'px;background:'+c.bg+';color:'+c.fg+'" aria-label="'+esc(it.n+" "+tmPct(it.r))+'">'+inner+'</button>';
 }
-function tmCard(g, y, W, h){
-  const HEAD = 24, col = g.r>0 ? "var(--buy-ink)" : g.r<0 ? "var(--sell-ink)" : "var(--sub)";
-  let html = '<div class="pc" style="left:0;top:'+y+'px;width:'+W+'px;height:'+h+'px"><button class="ph" data-tms="'+esc(g.s)+'"><span>'+esc(tmName(g.s))+' <small style="color:var(--faint);font-weight:500">'+g.items.length+'종목 · '+tmCap(g.v)+'</small></span><b style="color:'+col+'">'+tmPct(g.r)+'</b><em>›</em></button></div>';
-  squarify(g.items.slice(0, 24).map(x => ({v:x.m, c:x.c, n:x.n, r:x.r})), 3, y+3+HEAD, W-6, h-6-HEAD).forEach(r => html += tmTile(r));
+function tmCard(g, x, y, w, h, n){
+  if(w < 16 || h < 16) return "";
+  /* 머리줄: 넓으면 이름·종목 수·시총·등락률, 좁으면 이름만, 너무 낮으면 없음 */
+  const HEAD = h > 48 && w > 40 ? 24 : 0, wide = w >= 200, mid = w >= 120;
+  const col = g.r>0 ? "var(--buy-ink)" : g.r<0 ? "var(--sell-ink)" : "var(--sub)";
+  let html = '<div class="pc" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px">'
+    + (HEAD ? '<button class="ph" data-tms="'+esc(g.s)+'"><span>'+esc(tmName(g.s))+(wide ? ' <small style="color:var(--faint);font-weight:500">'+g.items.length+'종목 · '+tmCap(g.v)+'</small>' : '')+'</span>'
+      + (mid ? '<b style="color:'+col+'">'+tmPct(g.r)+'</b><em>›</em>' : '')+'</button>' : '') + '</div>';
+  squarify(g.items.slice(0, n||24).map(x => ({v:x.m, c:x.c, n:x.n, r:x.r})), x+3, y+3+HEAD, w-6, h-6-HEAD).forEach(r => html += tmTile(r));
   return html;
 }
 function renderMap(){
@@ -573,16 +582,34 @@ function renderMap(){
     $("tmSel").innerHTML = ""; $("tmLeg").innerHTML = ""; $("tmMore").hidden = true; $("tmDate").textContent = ""; return;
   }
   const list = raw.map(a => ({c:a[0], n:a[1], m:a[2], r:a[3], p:a[4], s:a[5]||"기타"}));
-  const secs = tmSectors(list), show = S.tmAll ? secs : secs.slice(0, 8);
-  const W = box.clientWidth || 340, tot = secs.slice(0, 8).reduce((a,g)=>a+g.v,0);
-  let html = "", y = 0;
-  /* 카드 높이: 시가총액 비율대로 하되 너무 작거나 크지 않게(96~300px) */
-  show.forEach(g => { const h = Math.round(Math.max(96, Math.min(300, 1500*g.v/tot))); html += tmCard(g, y, W, h); y += h + 8; });
-  box.style.height = Math.max(0, y-8)+"px"; box.innerHTML = html;
-  const more = secs.length - 8;
-  $("tmMore").hidden = more <= 0; $("tmMore").textContent = S.tmAll ? "접기" : "업종 "+more+"개 더 보기";
+  const secs = tmSectors(list), W = box.clientWidth || 340;
+  document.querySelectorAll("#segTv button").forEach(b => b.classList.toggle("on", b.dataset.tmv===S.tmView));
+  let html = "", H = 0, more = 0;
+  if(S.tmView === "A"){
+    /* A 한눈에: 업종 카드도 시가총액대로 나눠 한 화면에 (큰 업종 9개 + 그 밖) */
+    const big = secs.slice(0, 9), etc = secs.slice(9);
+    if(etc.length){ const all = etc.flatMap(g=>g.items).sort((a,b)=>b.m-a.m), v = all.reduce((a,x)=>a+x.m,0); big.push({s:"그 밖", v, r:all.reduce((a,x)=>a+x.m*x.r,0)/v, items:all}); }
+    H = Math.round(W*1.45);
+    squarify(big.map(g => ({v:g.v, g})), 0, 0, W, H).forEach(r => html += tmCard(r.it.g, r.x+3, r.y+3, r.w-6, r.h-6, 40));
+  } else if(S.tmView === "C"){
+    /* C 업종: 업종 상자만 → 누른 업종이 아래에 펼쳐짐 */
+    const top = Math.round(W*.8), sel = secs.find(g => g.s===S.tmSec) || secs[0];
+    squarify(secs.map(g => ({v:g.v, c:g.s, n:tmName(g.s), r:g.r})), 0, 0, W, top).forEach(r => html += tmTile(Object.assign(r, {it:Object.assign(r.it, {v:r.it.v})}), true));
+    if(!S.tmSec) S.tmSec = sel.s;
+    const ch = Math.round(W*.75);
+    html += tmCard(sel, 0, top+12, W, ch, 40);
+    H = top + 12 + ch;
+  } else {
+    /* B 세로: 큰 업종부터 카드를 아래로 (높이는 시총 비율대로, 96~300px) */
+    const show = S.tmAll ? secs : secs.slice(0, 8), tot = secs.slice(0, 8).reduce((a,g)=>a+g.v,0);
+    let y = 0;
+    show.forEach(g => { const h = Math.round(Math.max(96, Math.min(300, 1500*g.v/tot))); html += tmCard(g, 0, y, W, h); y += h + 8; });
+    H = Math.max(0, y-8); more = secs.length - 8;
+  }
+  box.style.height = H+"px"; box.innerHTML = html;
+  $("tmMore").hidden = S.tmView !== "B" || more <= 0; $("tmMore").textContent = S.tmAll ? "접기" : "업종 "+more+"개 더 보기";
   const t = new Date(S.map.ts), open = S.map.status === "OPEN";
-  $("tmDate").textContent = (open ? "장중 · "+hhmm(t) : md(S.map.date || (S.data && (S.data.markets.find(m=>m.flow)||{flow:{}}).flow.date) || t.toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,""))+" 마감")+" · 상위 "+list.length+"종목";
+  $("tmDate").textContent = (open ? "장중 · "+hhmm(t) : md(S.map.date || (S.data && (S.data.markets.find(m=>m.flow)||{flow:{}}).flow.date) || t.toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,""))+" 마감")+" · 상위 "+list.length+"종목 · 크기=시총";
   const pick = list.find(x => x.c===S.tmPick), g0 = S.tmSec && secs.find(g => g.s===S.tmSec);
   $("tmSel").innerHTML = pick
     ? '<b>'+esc(pick.n)+'</b> '+(pick.p!=null ? Math.round(pick.p).toLocaleString("ko-KR")+'원 ' : '')+'<span class="'+tone(pick.r)+'">'+tmPct(pick.r)+'</span> <small>시총 '+tmCap(pick.m)+' · '+esc(tmName(pick.s))+'</small>'
@@ -748,8 +775,9 @@ document.addEventListener("click", e => {
   else if(t.dataset.mode){ S.mode = t.dataset.mode; store.set("mode", S.mode); render(); }
   else if(t.dataset.unit){ S.unit = t.dataset.unit; store.set("unit", S.unit); render(); }
   else if(t.dataset.tmk){ S.tmk = t.dataset.tmk; store.set("tmk", S.tmk); S.tmPick = null; S.tmSec = null; S.tmAll = false; renderMap(); }
+  else if(t.dataset.tmv){ S.tmView = t.dataset.tmv; store.set("tmView", S.tmView); S.tmAll = false; renderMap(); }
   else if(t.dataset.tm){ S.tmPick = S.tmPick===t.dataset.tm ? null : t.dataset.tm; S.tmSec = null; renderMap(); }
-  else if(t.dataset.tms){ S.tmSec = S.tmSec===t.dataset.tms ? null : t.dataset.tms; S.tmPick = null; renderMap(); }
+  else if(t.dataset.tms){ S.tmSec = (S.tmView!=="C" && S.tmSec===t.dataset.tms) ? null : t.dataset.tms; S.tmPick = null; renderMap(); }
   else if(t.id==="tmMore"){ S.tmAll = !S.tmAll; renderMap(); }
 });
 
