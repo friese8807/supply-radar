@@ -1,14 +1,26 @@
 name: probe
 on: { push: { branches: [probe-naver] } }
-permissions: { contents: write }
 jobs:
   p:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
       - run: |
-          node probe.cjs
-          git -c user.name=bot -c user.email=bot@users.noreply.github.com commit -qm "data [skip ci]" -- kospi.json 2>/dev/null || (git add kospi.json && git -c user.name=bot -c user.email=bot@users.noreply.github.com commit -qm "data [skip ci]")
-          git push -q
+          UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
+          C=005930
+          for u in \
+            "https://m.stock.naver.com/api/stock/$C/integration" \
+            "https://m.stock.naver.com/api/stock/$C/basic" \
+            "https://m.stock.naver.com/api/stock/$C/overview" \
+            "https://m.stock.naver.com/api/stock/$C/finance/annual" \
+            "https://m.stock.naver.com/api/stock/$C/finance/quarter" \
+            "https://m.stock.naver.com/api/news/stock/$C?pageSize=3&page=1" \
+            "https://api.stock.naver.com/chart/domestic/item/$C/day?startDateTime=202608010000&endDateTime=202611210000" \
+            "https://api.stock.naver.com/chart/domestic/item/$C?periodType=dayCandle" \
+            "https://m.stock.naver.com/front-api/chart/pricesByPeriod?reutersCode=$C&periodType=dayCandle&count=5" \
+            "https://polling.finance.naver.com/api/realtime/domestic/stock/$C" \
+            "https://m.stock.naver.com/api/stock/$C/trend?pageSize=3" ; do
+            echo "=================== $u"
+            curl -s -D /tmp/h -o /tmp/b -A "$UA" -H 'Origin: https://friese8807.github.io' -H 'Referer: https://m.stock.naver.com/' "$u"
+            grep -i "^HTTP\|access-control-allow-origin\|content-type" /tmp/h | tr -d '\r'
+            head -c 2500 /tmp/b; echo
+          done
