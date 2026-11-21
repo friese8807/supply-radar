@@ -35,6 +35,55 @@ function intraday(prevMarket, flow, hhmm) {
   return pts.slice(-240);
 }
 
+/* ---------- 시장 지도: 종목별 시가총액·등락률 + 업종 ---------- */
+const num = v => { if (v == null) return null; const n = parseFloat(String(v).replace(/[,+%\s]/g, '')); return isFinite(n) ? n : null; };
+
+/** 업종별 소속 종목(하루 한 번이면 충분). { 업종이름: [코드,...] } */
+async function sectorMap(prev, today) {
+  if (prev && prev.date === today && prev.sec && Object.keys(prev.sec).length > 30) return prev;
+  const groups = [];
+  for (let p = 1; p <= 5; p++) {
+    const j = await get('https://m.stock.naver.com/api/stocks/industry?page=' + p + '&pageSize=100');
+    if (!j || !Array.isArray(j.groups) || !j.groups.length) break;
+    groups.push(...j.groups); if (groups.length >= (j.totalCount || 0)) break;
+  }
+  if (groups.length < 30) return prev && prev.sec ? prev : null;
+  const sec = {};
+  for (let i = 0; i < groups.length; i += 8) {
+    await Promise.all(groups.slice(i, i + 8).map(async g => {
+      const codes = [];
+      for (let p = 1; p <= 10; p++) {
+        const j = await get('https://m.stock.naver.com/api/stocks/industry/' + g.no + '?page=' + p + '&pageSize=100');
+        const a = (j && j.stocks) || []; a.forEach(x => codes.push(x.itemCode));
+        if (a.length < 100) break;
+      }
+      sec[g.name] = codes;
+    }));
+  }
+  return { date: today, sec };
+}
+
+/** 코스피·코스닥 시가총액 상위 종목. 항목 = [코드, 이름, 시총(억원), 등락률, 현재가, 업종] */
+async function marketMap(secs) {
+  const of = {};
+  if (secs) Object.entries(secs.sec).forEach(([name, codes]) => codes.forEach(c => { of[c] = name; }));
+  const out = {};
+  for (const mk of ['KOSPI', 'KOSDAQ']) {
+    const pages = await Promise.all([1, 2, 3].map(p => get('https://m.stock.naver.com/api/stocks/marketValue/' + mk + '?page=' + p + '&pageSize=100')));
+    const list = [];
+    pages.forEach(j => ((j && j.stocks) || []).forEach(x => {
+      if (x.stockEndType !== 'stock') return;
+      const m = num(x.marketValue); if (!m) return;
+      list.push([x.itemCode, x.stockName, m, num(x.fluctuationsRatio) || 0, num(x.closePrice), of[x.itemCode] || null]);
+    }));
+    // 우선주는 본주의 업종을 따름 (삼성전자우 → 삼성전자)
+    const byName = {}; list.forEach(a => { byName[a[1]] = a; });
+    list.forEach(a => { if (!a[5]) { const base = a[1].replace(/(\d?우B?|\(전환\))$/, ''); a[5] = (base !== a[1] && byName[base] && byName[base][5]) || '기타'; } });
+    if (list.length) out[mk] = list.sort((a, b) => b[2] - a[2]);
+  }
+  return out;
+}
+
 if (require.main === module) (async () => {
   const prev = readPrev(process.argv[3] || '');
   const hhmm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16);
@@ -66,7 +115,19 @@ if (require.main === module) (async () => {
   const out = { ok: true, ts: new Date().toISOString(), snapshot: true, markets, stocks, errors };
   fs.mkdirSync(process.argv[2] || 'out', { recursive: true });
   fs.writeFileSync(path.join(process.argv[2] || 'out', 'data.json'), JSON.stringify(out));
+  // 시장 지도 (실패해도 수급 자료는 그대로 올림 — 지난 지도를 유지)
+  try {
+    const dir = path.dirname(process.argv[3] || 'prev.json');
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    const secs = await sectorMap(readPrev(path.join(dir, 'prevsec.json')), today);
+    const mm = await marketMap(secs);
+    const pm = readPrev(path.join(dir, 'prevmap.json'));
+    const map = { ts: new Date().toISOString(), status: (markets[0] && markets[0].status) || '', markets: Object.assign({}, pm && pm.markets, mm) };
+    if (secs) fs.writeFileSync(path.join(process.argv[2] || 'out', 'sectors.json'), JSON.stringify(secs));
+    if (Object.keys(mm).length) fs.writeFileSync(path.join(process.argv[2] || 'out', 'map.json'), JSON.stringify(map));
+    console.log('map', Object.entries(mm).map(([k, v]) => k + ':' + v.length).join(' '));
+  } catch (e) { console.error('시장 지도 실패', String(e)); }
   console.log('markets', markets.map(x => x.code + ':' + JSON.stringify(x.flow)).join(' '), '| stocks', stocks.length, '| errors', errors.length);
 })();
 
-module.exports = { intraday };
+module.exports = { intraday, marketMap, sectorMap };

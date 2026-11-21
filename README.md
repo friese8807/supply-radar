@@ -9,11 +9,12 @@
 | `icon-180-v2.png`, `icon-512-v2.png`, `manifest.json` | 홈 화면 아이콘 |
 | `widget.js` | 아이폰 Scriptable 위젯 로더 (처음 한 번만 붙여 넣기) |
 | `widget-core.js` | 위젯 본체 — 로더가 실행될 때마다 새로 받아 씀 (작은·중간·큰·잠금 화면) |
-| `fetch.cjs`, `watchlist.json` | GitHub Actions가 약 5분마다 `data` 브랜치의 `data.json`을 갱신 |
+| `fetch.cjs`, `watchlist.json` | GitHub Actions가 장중 1분마다 `data` 브랜치의 `data.json`(수급)·`map.json`(시장 지도)을 갱신, 업종 목록 `sectors.json`은 하루 한 번 |
 | `Code.gs` | (선택) Apps Script 데이터 서버 — 연결하면 모든 종목, 15초 간격 |
 
 - 기본 동작: 서버 주소 없이 `watchlist.json`의 종목(삼성전자, SK하이닉스)과 코스피·코스닥을 약 5분 간격으로 표시합니다.
 - 종목을 바꾸려면 `watchlist.json`을 고칩니다.
 - 실시간에 가깝게 보려면 `Code.gs`를 Apps Script 웹 앱(액세스: 모든 사용자)으로 배포하고, 앱 메뉴의 "데이터 서버 주소"에 붙여 넣습니다.
+- 시장 지도: 코스피·코스닥 시가총액 상위 약 300종목을 업종 카드로 묶어 보여 줍니다. 상자 크기는 시가총액, 색은 그날 등락률(±5%에서 가장 진함)입니다.
 - 시장 전체 수급은 장중 값, 종목별 수급은 거래일 단위 집계입니다. 금액은 수량 × 종가 추정치입니다.
 - 데이터 출처: 네이버 증권. 투자 판단의 참고용입니다.

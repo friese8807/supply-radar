@@ -172,6 +172,23 @@ td .cp{display:block;font-size:11px;font-weight:600}
 .btn.ghost{background:var(--soft);color:var(--ink)}
 .hint{font-size:12.5px;color:var(--sub);margin:8px 2px 0;line-height:1.55}
 @media (prefers-reduced-motion:reduce){.spin,.dot.live{animation:none}.sheet,.dim{transition:none}}
+
+/* 시장 지도 (업종 카드형 트리맵) */
+.tm-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 10px}
+.tm-tools small{font-size:12px;color:var(--sub)}
+.tm{position:relative}
+.pc{position:absolute;background:var(--card);border-radius:14px;box-shadow:0 0 0 1px var(--line),var(--shadow)}
+.ph{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:4px;height:24px;padding:5px 9px 0;font-size:12px;text-align:left}
+.ph span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--sub);font-weight:600}
+.ph b{font-variant-numeric:tabular-nums}.ph em{font-style:normal;color:var(--faint)}
+.pt{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;line-height:1.18;padding:1px}
+.pt b{font-weight:700;white-space:nowrap;letter-spacing:-.03em}.pt i{font-style:normal;font-variant-numeric:tabular-nums;opacity:.85}
+.pt.on{box-shadow:0 0 0 2px var(--ink)}
+.tm-sel{font-size:13.5px;margin:0 2px 10px;text-align:center;min-height:20px;word-break:keep-all}.tm-sel small{color:var(--sub)}
+.tm-leg{display:flex;align-items:center;gap:6px;justify-content:center;font-size:11px;color:var(--sub);margin-top:8px}
+.tm-leg i{width:70px;height:8px;border-radius:4px}
+.tm-more{display:block;width:100%;margin-top:10px;padding:11px;border-radius:12px;background:var(--soft);font-size:14px;font-weight:600;color:var(--sub)}
+.tm-empty{padding:28px 10px;text-align:center;color:var(--sub);font-size:13.5px;word-break:keep-all;text-wrap:balance}
 </style>
 </head>
 <body>
@@ -191,6 +208,15 @@ td .cp{display:block;font-size:11px;font-weight:600}
     <div class="mkts" id="mkts"></div>
     <div class="card intra" id="intra"></div>
   </section>
+  <section class="sec" id="tmSec">
+    <div class="sec-h"><h2>시장 지도</h2><small id="tmDate"></small></div>
+    <div class="tm-tools"><div class="seg" id="segTm"><button data-tmk="KOSPI">코스피</button><button data-tmk="KOSDAQ">코스닥</button></div><small>상자 크기 = 시가총액</small></div>
+    <div class="tm-sel" id="tmSel"></div>
+    <div class="tm" id="tm"></div>
+    <div class="tm-leg" id="tmLeg"></div>
+    <button class="tm-more" id="tmMore" hidden></button>
+  </section>
+
 
   <section class="sec">
     <div class="sec-h"><h2>종목 수급</h2><small id="stDate"></small></div>
@@ -229,6 +255,7 @@ td .cp{display:block;font-size:11px;font-weight:600}
 /* ===== 설정 ===== */
 const API_URL = "";
 const SNAPSHOT_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/data/data.json";   // 5분 캐시
+const MAP_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/data/map.json";      // 시장 지도(5분 캐시)
 const SNAPSHOT_API = "https://api.github.com/repos/friese8807/supply-radar/contents/data.json?ref=data"; // 1분 캐시(시간당 60회 제한)
 const DEFAULT_WATCH = [{code:"005930",name:"삼성전자"},{code:"000660",name:"SK하이닉스"}];
 const WHO = ["foreign","organ","individual"];
@@ -248,6 +275,8 @@ const S = {
   unit: store.get("unit","amount"),   // amount=억원(추정) | qty=주
   mode: store.get("mode","daily"),    // daily | cum
   mk: store.get("mk","KOSPI"),
+  tmk: store.get("tmk","KOSPI"),     // 시장 지도: KOSPI | KOSDAQ
+  tmAll: false, tmPick: null, map: null, mapAt: 0,
   demo: false, data: null, loading: false, timer: null, lastOk: null
 };
 if(!Array.isArray(S.watch) || !S.watch.length) S.watch = DEFAULT_WATCH.slice();
@@ -317,7 +346,7 @@ function signal(stock){
 function render(){
   $("demoBar").hidden = !S.demo;
   const d = S.data;
-  renderMarkets(d); renderIntra(d); renderChips(d); renderStock(d); renderTable(d);
+  renderMarkets(d); renderIntra(d); renderMap(); renderChips(d); renderStock(d); renderTable(d);
   const errs = (d && d.errors) || [];
   $("warn").hidden = !errs.length; if(errs.length) $("warn").textContent = errs.join(" · ");
   renderSheet();
@@ -482,6 +511,99 @@ function setStatus(t){ $("st").textContent = t; }
 function hhmm(dt){ const t = dt.toLocaleTimeString("ko-KR",{hour12:false,hour:"2-digit",minute:"2-digit"}); return (new Date().toDateString()===dt.toDateString() ? "" : (dt.getMonth()+1)+"/"+dt.getDate()+" ") + t; }
 function hhmmss(dt){ return dt.toLocaleTimeString("ko-KR",{hour12:false}); }
 
+
+/* ===== 시장 지도: 업종 카드 + 종목 상자 (크기 = 시가총액, 색 = 등락률) ===== */
+const TM_CAP = 5;          // ±5%에서 가장 진하게
+const TM_SHORT = {"반도체와반도체장비":"반도체","전자장비와기기":"전자장비","석유와가스":"석유·가스","우주항공과국방":"방산·항공","양방향미디어와서비스":"인터넷","호텔,레스토랑,레저":"레저","건강관리장비와용품":"의료기기","디스플레이장비및부품":"디스플레이","건강관리업체및서비스":"의료서비스","가정용기기와용품":"가정용품","식품과기본식료품소매":"식품유통","생물공학":"바이오","전기유틸리티":"전력","건강관리기술":"헬스케어IT","소프트웨어":"소프트웨어"};
+const tmName = s => TM_SHORT[s] || s;
+const darkQ = matchMedia("(prefers-color-scheme: dark)");
+function tmShade(r){
+  const P = darkQ.matches
+    ? {neu:[44,48,56], up:[[96,48,52],[176,52,56]], dn:[[42,58,98],[52,98,206]], ink:"#eef0f4"}
+    : {neu:[240,241,243], up:[[251,214,211],[226,82,78]], dn:[[214,226,250],[64,112,222]], ink:"#2a2d33"};
+  const mix = (a,b,t) => a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+  const t = Math.min(Math.abs(r||0)/TM_CAP, 1), side = r>0 ? P.up : P.dn;
+  if(t < .02) return {bg:"rgb("+P.neu+")", fg:P.ink};
+  const c = t<.35 ? mix(P.neu, side[0], t/.35) : mix(side[0], side[1], (t-.35)/.65);
+  return {bg:"rgb("+c+")", fg:(!darkQ.matches && t > .62) ? "#fff" : P.ink};
+}
+/* 정사각형에 가깝게 나누기(squarified treemap) */
+function squarify(items, x, y, w, h){
+  const out = [], total = items.reduce((a,b)=>a+b.v,0); if(!total || w<=0 || h<=0) return out;
+  const scale = w*h/total; let rest = items.map(it => ({it, a:it.v*scale}));
+  const worst = (row, s) => { const sum = row.reduce((a,b)=>a+b.a,0); let mx = 0, mn = Infinity; row.forEach(r => { mx = Math.max(mx,r.a); mn = Math.min(mn,r.a); }); return Math.max(s*s*mx/(sum*sum), sum*sum/(s*s*mn)); };
+  while(rest.length){
+    const short = Math.min(w,h); let row = [rest[0]], best = worst(row, short), i = 1;
+    while(i < rest.length){ const nr = row.concat(rest[i]), wv = worst(nr, short); if(wv > best) break; row = nr; best = wv; i++; }
+    const sum = row.reduce((a,b)=>a+b.a,0);
+    if(w >= h){ const cw = sum/h; let cy = y; row.forEach(r => { const ch = r.a/cw; out.push({it:r.it, x, y:cy, w:cw, h:ch}); cy += ch; }); x += cw; w -= cw; }
+    else { const ch = sum/w; let cx = x; row.forEach(r => { const cw = r.a/ch; out.push({it:r.it, x:cx, y, w:cw, h:ch}); cx += cw; }); y += ch; h -= ch; }
+    rest = rest.slice(i);
+  }
+  return out;
+}
+function tmPct(r){ return (r>0?"+":"")+(r||0).toFixed(2)+"%"; }
+function tmCap(m){ const jo = m/1e4; return jo >= 1 ? (jo>=100 ? Math.round(jo).toLocaleString("ko-KR") : jo.toFixed(1))+"조" : Math.round(m).toLocaleString("ko-KR")+"억"; }
+function tmSectors(list){
+  const by = {};
+  list.forEach(x => { const g = by[x.s] = by[x.s] || {s:x.s, v:0, mr:0, items:[]}; g.v += x.m; g.mr += x.m*x.r; g.items.push(x); });
+  return Object.values(by).map(g => (g.r = g.mr/g.v, g)).sort((a,b)=>b.v-a.v);
+}
+function tmTile(r){
+  const G = 1.5, x = r.x+G, y = r.y+G, w = r.w-2*G, h = r.h-2*G; if(w < 2 || h < 2) return "";
+  const it = r.it, c = tmShade(it.r), rad = Math.min(8, w/4, h/4);
+  const fs = Math.min(Math.max(9, Math.min(16, Math.sqrt(w*h)/5.4)), (w-6)/(it.n.length*1.02));
+  let inner = "";
+  /* 이름이 다 들어갈 때만 쓰고(잘린 이름은 뜻이 사라짐), 높이가 되면 등락률도 */
+  if(fs >= 8.5 && h >= 18){ inner = '<b style="font-size:'+fs.toFixed(1)+'px">'+esc(it.n)+'</b>'; if(h >= fs*2.7) inner += '<i style="font-size:'+Math.max(8.5,fs*.8).toFixed(1)+'px">'+tmPct(it.r)+'</i>'; }
+  return '<button class="pt'+(S.tmPick===it.c?" on":"")+'" data-tm="'+it.c+'" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;width:'+w.toFixed(1)+'px;height:'+h.toFixed(1)+'px;border-radius:'+rad.toFixed(1)+'px;background:'+c.bg+';color:'+c.fg+'" aria-label="'+esc(it.n+" "+tmPct(it.r))+'">'+inner+'</button>';
+}
+function tmCard(g, y, W, h){
+  const HEAD = 24, col = g.r>0 ? "var(--buy-ink)" : g.r<0 ? "var(--sell-ink)" : "var(--sub)";
+  let html = '<div class="pc" style="left:0;top:'+y+'px;width:'+W+'px;height:'+h+'px"><button class="ph" data-tms="'+esc(g.s)+'"><span>'+esc(tmName(g.s))+' <small style="color:var(--faint);font-weight:500">'+g.items.length+'종목 · '+tmCap(g.v)+'</small></span><b style="color:'+col+'">'+tmPct(g.r)+'</b><em>›</em></button></div>';
+  squarify(g.items.slice(0, 24).map(x => ({v:x.m, c:x.c, n:x.n, r:x.r})), 3, y+3+HEAD, W-6, h-6-HEAD).forEach(r => html += tmTile(r));
+  return html;
+}
+function renderMap(){
+  const box = $("tm"); if(!box) return;
+  document.querySelectorAll("#segTm button").forEach(b => b.classList.toggle("on", b.dataset.tmk===S.tmk));
+  const raw = S.map && S.map.markets && S.map.markets[S.tmk];
+  if(!raw || !raw.length){
+    box.style.height = ""; box.innerHTML = '<div class="tm-empty">'+(S.mapErr ? "시장 지도를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요." : "시장 지도를 불러오는 중이에요…")+'</div>';
+    $("tmSel").innerHTML = ""; $("tmLeg").innerHTML = ""; $("tmMore").hidden = true; $("tmDate").textContent = ""; return;
+  }
+  const list = raw.map(a => ({c:a[0], n:a[1], m:a[2], r:a[3], p:a[4], s:a[5]||"기타"}));
+  const secs = tmSectors(list), show = S.tmAll ? secs : secs.slice(0, 8);
+  const W = box.clientWidth || 340, tot = secs.slice(0, 8).reduce((a,g)=>a+g.v,0);
+  let html = "", y = 0;
+  /* 카드 높이: 시가총액 비율대로 하되 너무 작거나 크지 않게(96~300px) */
+  show.forEach(g => { const h = Math.round(Math.max(96, Math.min(300, 1500*g.v/tot))); html += tmCard(g, y, W, h); y += h + 8; });
+  box.style.height = Math.max(0, y-8)+"px"; box.innerHTML = html;
+  const more = secs.length - 8;
+  $("tmMore").hidden = more <= 0; $("tmMore").textContent = S.tmAll ? "접기" : "업종 "+more+"개 더 보기";
+  const t = new Date(S.map.ts), open = S.map.status === "OPEN";
+  $("tmDate").textContent = (open ? "장중 · "+hhmm(t) : md(t.toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,""))+" 마감")+" · 상위 "+list.length+"종목";
+  const pick = list.find(x => x.c===S.tmPick), g0 = S.tmSec && secs.find(g => g.s===S.tmSec);
+  $("tmSel").innerHTML = pick
+    ? '<b>'+esc(pick.n)+'</b> '+(pick.p!=null ? Math.round(pick.p).toLocaleString("ko-KR")+'원 ' : '')+'<span class="'+tone(pick.r)+'">'+tmPct(pick.r)+'</span> <small>시총 '+tmCap(pick.m)+' · '+esc(tmName(pick.s))+'</small>'
+    : g0 ? '<b>'+esc(tmName(g0.s))+'</b> <span class="'+tone(g0.r)+'">'+tmPct(g0.r)+'</span> <small>'+g0.items.length+'종목 · 시총 '+tmCap(g0.v)+' (시총 가중 평균)</small>'
+    : '<small>상자를 누르면 종목 정보가 나와요</small>';
+  $("tmLeg").innerHTML = '<span>−5%</span><i style="background:linear-gradient(90deg,'+tmShade(-5).bg+','+tmShade(-2).bg+','+tmShade(0).bg+')"></i><span>0</span><i style="background:linear-gradient(90deg,'+tmShade(0).bg+','+tmShade(2).bg+','+tmShade(5).bg+')"></i><span>+5%</span>';
+}
+async function loadMap(force){
+  if(S.demo){ S.map = demoMap(); renderMap(); return; }
+  if(!force && Date.now() - S.mapAt < 60000) return;
+  S.mapAt = Date.now();
+  try{
+    const r = await fetch(MAP_URL+"?t="+Date.now(), {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    S.map = await r.json(); S.mapErr = false;
+  }catch(e){ S.mapErr = true; }
+  renderMap();
+}
+darkQ.addEventListener && darkQ.addEventListener("change", renderMap);
+let tmW = 0; addEventListener("resize", () => { const w = $("tm").clientWidth; if(w !== tmW){ tmW = w; renderMap(); } });
+
 /* ===== 데이터 ===== */
 async function api(params){
   const u = S.api + (S.api.includes("?")?"&":"?") + new URLSearchParams(params);
@@ -525,8 +647,9 @@ function mergeIntra(m, o){
 
 async function load(){
   if(S.loading) return;
-  if(S.demo){ S.data = demoData(); S.lastOk = new Date(); setStatus("예시 화면"); render(); return; }
+  if(S.demo){ S.data = demoData(); S.lastOk = new Date(); setStatus("예시 화면"); loadMap(); render(); return; }
   S.loading = true; $("icoRefresh").classList.add("spin");
+  loadMap();
   try{
     let j;
     if(S.api){
@@ -624,6 +747,10 @@ document.addEventListener("click", e => {
   else if(t.dataset.who){ S.who = t.dataset.who; store.set("who", S.who); render(); }
   else if(t.dataset.mode){ S.mode = t.dataset.mode; store.set("mode", S.mode); render(); }
   else if(t.dataset.unit){ S.unit = t.dataset.unit; store.set("unit", S.unit); render(); }
+  else if(t.dataset.tmk){ S.tmk = t.dataset.tmk; store.set("tmk", S.tmk); S.tmPick = null; S.tmSec = null; S.tmAll = false; renderMap(); }
+  else if(t.dataset.tm){ S.tmPick = S.tmPick===t.dataset.tm ? null : t.dataset.tm; S.tmSec = null; renderMap(); }
+  else if(t.dataset.tms){ S.tmSec = S.tmSec===t.dataset.tms ? null : t.dataset.tms; S.tmPick = null; renderMap(); }
+  else if(t.id==="tmMore"){ S.tmAll = !S.tmAll; renderMap(); }
 });
 
 /* ===== 예시 데이터 ===== */
@@ -639,6 +766,14 @@ function demoData(){
     {code:"KOSPI",name:"코스피",price:5342.73,change:-32.6,pct:-0.61,status:"OPEN",flow:{date:days[0],personal:-1410,foreign:3720,institution:-2290},intraday:intra(1)},
     {code:"KOSDAQ",name:"코스닥",price:696.53,change:-8.6,pct:-1.22,status:"OPEN",flow:{date:days[0],personal:1830,foreign:-1210,institution:-540},intraday:intra(-.6)}],
     stocks: S.watch.map((w,i) => ({code:w.code,name:w.name||w.code,price:[206500,1241000][i%2],change:[500,-36000][i%2],pct:[0.24,-2.82][i%2],status:"OPEN",trend:mk(i*2+1,[206500,1241000][i%2])})) };
+}
+
+function demoMap(){
+  const secs = [["반도체와반도체장비",["삼성전자","SK하이닉스","삼성전자우","SK스퀘어","한미반도체","DB하이텍"]],["은행",["KB금융","신한지주","하나금융지주","우리금융지주","기업은행"]],["제약",["삼성바이오로직스","셀트리온","유한양행","한미약품"]],["전기제품",["LG에너지솔루션","삼성SDI","LS일렉트릭"]],["자동차",["현대차","기아"]],["조선",["HD현대중공업","한화오션","삼성중공업","HD한국조선해양"]],["복합기업",["삼성물산","LG","SK","두산"]],["화학",["LG화학","롯데케미칼","금호석유"]],["인터넷",["NAVER","카카오"]],["철강",["POSCO홀딩스","현대제철"]]];
+  const list = []; let k = 0;
+  secs.forEach(([s, names], gi) => names.forEach((n, i) => { k++; const m = Math.round(9e6/Math.pow(k, 1.15)); list.push([String(100000+k), n, m, +(Math.sin(k*1.7+gi)*3.2 + (gi%3-1)*1.2).toFixed(2), Math.round(m/50)*10, s]); }));
+  list.sort((a,b)=>b[2]-a[2]);
+  return {ts:new Date().toISOString(), status:"OPEN", markets:{KOSPI:list, KOSDAQ:list.slice(0,20).map(a=>[a[0],a[1]+"(닥)",a[2]/20,-a[3],a[4],a[5]])}};
 }
 
 if(location.hash==="#demo") S.demo = true;

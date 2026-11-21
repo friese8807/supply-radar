@@ -33,7 +33,11 @@ jobs:
         with:
           node-version: 20
       - name: 이전 데이터 받기 (장중 흐름 이어 쌓기)
-        run: git fetch --depth 1 origin data && git show FETCH_HEAD:data.json > prev.json || echo '{}' > prev.json
+        run: |
+          git fetch --depth 1 origin data || true
+          git show FETCH_HEAD:data.json > prev.json || echo '{}' > prev.json
+          git show FETCH_HEAD:map.json > prevmap.json || echo '{}' > prevmap.json
+          git show FETCH_HEAD:sectors.json > prevsec.json || echo '{}' > prevsec.json
       - name: 1분마다 받아서 올리기 + 다음 실행 이어 걸기
         env:
           TOKEN: ${{ github.token }}
@@ -47,7 +51,9 @@ jobs:
           fetch_once() {
             if node fetch.cjs out prev.json; then
               cp out/data.json prev.json
-              ( cd out && rm -rf .git && git init -q -b data && git add data.json \
+              [ -f out/map.json ] && cp out/map.json prevmap.json
+              [ -f out/sectors.json ] && cp out/sectors.json prevsec.json
+              ( cd out && rm -rf .git && git init -q -b data && git add data.json $(ls map.json sectors.json 2>/dev/null) \
                 && git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "data $(date -u +%FT%TZ)" \
                 && git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" data ) || echo "올리기 실패, 다음 회차에 다시"
             fi
