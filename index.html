@@ -264,7 +264,7 @@ body.open,body.sdopen{overflow:hidden}
   </section>
   <section class="sec" id="tmSec">
     <div class="sec-h"><h2>시장 지도</h2><small id="tmDate"></small></div>
-    <div class="tm-tools"><div class="seg" id="segTm"><button data-tmk="KOSPI">코스피</button><button data-tmk="KOSDAQ">코스닥</button></div><div class="seg" id="segTv"><button data-tmv="A">A 종목</button><button data-tmv="B">B 한눈에</button><button data-tmv="C">C 세로</button><button data-tmv="D">D 업종</button></div></div>
+    <div class="tm-tools"><div class="seg" id="segTm"><button data-tmk="KOSPI">코스피</button><button data-tmk="KOSDAQ">코스닥</button></div><div class="seg" id="segTv"><button data-tmv="A">종목</button><button data-tmv="B">한눈에</button><button data-tmv="C">세로</button><button data-tmv="D">업종</button></div></div>
     <div class="tm-sel" id="tmSel"></div>
     <div class="tm" id="tm"></div>
     <div class="tm-leg" id="tmLeg"></div>
@@ -310,6 +310,7 @@ body.open,body.sdopen{overflow:hidden}
 
 <script>
 /* ===== 설정 ===== */
+const BUILD = '1795279451';   // 배포 때 version.txt 와 같이 올림 (bump_version.py)
 const API_URL = "";
 const SNAPSHOT_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/data/data.json";   // 5분 캐시
 const DETAIL_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/detail/d/";   // 종목 상세(30분마다)
@@ -970,7 +971,10 @@ $("q").addEventListener("input", () => {
   if(S.demo) return;
   if(!S.api){
     const hit = ((S.data && S.data.stocks) || []).filter(x => x.name.toLowerCase().includes(q.toLowerCase()) || x.code.includes(q));
+    const ql = q.toLowerCase(), seen = new Set(hit.map(x=>x.code));
+    const more = Object.values((S.map && S.map.markets) || {}).flat().filter(a => (a[1].toLowerCase().includes(ql) || a[0].includes(q)) && !seen.has(a[0]) && seen.add(a[0])).slice(0, 10);
     $("results").innerHTML = hit.map(it => '<div class="li"><button class="n" data-add="'+esc(it.code)+'" data-name="'+esc(it.name)+'">'+esc(it.name)+' <small>'+esc(it.code)+'</small></button></div>').join("")
+      + more.map(a => '<div class="li"><button class="n" data-sd="'+esc(a[0])+'">'+esc(a[1])+' <small>'+esc(a[0])+' · 상세 보기</small></button><b class="num '+tone(a[3])+'" style="font-size:13px">'+tmPct(a[3])+'</b></div>').join("")
       || '<div class="li"><small>기본 제공 종목에 없어요. 데이터 서버를 연결하면 모든 종목을 볼 수 있어요.</small></div>';
     return;
   }
@@ -987,6 +991,7 @@ $("q").addEventListener("input", () => {
 $("sheet").addEventListener("click", e => {
   const t = e.target.closest("button"); if(!t) return;
   if(t.dataset.add) addStock(t.dataset.add, t.dataset.name);
+  else if(t.dataset.sd){ closeSheet(); openDetail(t.dataset.sd); }
   else if(t.dataset.pick){ closeSheet(); selectStock(t.dataset.pick); }
   else if(t.dataset.up){ const i = S.watch.findIndex(w=>w.code===t.dataset.up); if(i>0){ [S.watch[i-1],S.watch[i]] = [S.watch[i],S.watch[i-1]]; store.set("watch", S.watch); render(); } }
   else if(t.dataset.del){
@@ -1044,6 +1049,14 @@ function demoMap(){
   return {ts:new Date().toISOString(), status:"OPEN", markets:{KOSPI:list, KOSDAQ:list.slice(0,20).map(a=>[a[0],a[1]+"(닥)",a[2]/20,-a[3],a[4],a[5]])}};
 }
 
+function autoUpdate(){
+  fetch("version.txt?t="+Date.now(), {cache:"no-store"}).then(r => r.text()).then(v => {
+    v = (v||"").trim(); if(!/^[0-9]+$/.test(v) || v === BUILD) return;
+    try{ if(sessionStorage.getItem("sr-up") === v) return; sessionStorage.setItem("sr-up", v); }catch(e){}
+    location.replace(location.pathname + "?v=" + v + location.hash);
+  }).catch(() => {});
+}
+autoUpdate(); document.addEventListener("visibilitychange", () => { if(!document.hidden) autoUpdate(); });
 if(location.hash==="#demo") S.demo = true;
 render(); load();
 </script>
