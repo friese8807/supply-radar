@@ -146,9 +146,116 @@ function recordFlow() {
     props.setProperty('closePush', now.date);
     pushTo_(function () { return true; }, '📊 오늘 수급 마감', close.join('\n'));
   }
+  // 사이드카·서킷브레이커 감시 (실패해도 수급 기록은 그대로)
+  try { haltWatch_(now, props); } catch (e) { Logger.log('haltWatch 오류 ' + e); }
   // 지난 날짜 정리
   var all = props.getKeys();
-  all.forEach(function (k) { if (k.indexOf('i:') === 0 && k.split(':')[2] !== now.date) props.deleteProperty(k); });
+  all.forEach(function (k) { if ((k.indexOf('i:') === 0 && k.split(':')[2] !== now.date) || (k.indexOf('h:') === 0 && k.split(':')[1] !== now.date)) props.deleteProperty(k); });
+}
+
+/* ---------- 사이드카·서킷브레이커 알림 (recordFlow 가 1분마다 부른다) ----------
+ * 거래소 발동 기준
+ *  · 서킷브레이커: 코스피·코스닥 지수가 전일보다 8%·15%·20% 이상 떨어진 채 1분 이어지면 (14:50 이후는 발동 안 함, 단계마다 하루 한 번)
+ *  · 사이드카: 코스피 = 코스피200 선물 ±5% 1분 / 코스닥 = 코스닥150 선물 ±6% 이면서 코스닥150 지수 ±3% 1분 (시장마다 하루 한 번)
+ * 네이버 시세에 발동 여부 칸이 있으면 그 값을 그대로 쓰고(확정), 없으면 지수 등락률로 '조건 도달'을 판단해(추정) 알린다.
+ * 선물 시세 대신 코스피200·코스닥150 지수를 쓰므로 추정 알림에는 '조건 도달(추정)'이라고 적는다.
+ * 1분 간격 두 번 연달아 조건이면 알리고, 같은 날 같은 알림은 한 번만 보낸다. */
+var HALT_IDX = { KOSPI: ['KOSPI'], KOSDAQ: ['KOSDAQ'], K200: ['KPI200'], Q150: ['KQ150', 'KOSDAQ150'] };
+var CB_LV = [[20, 3], [15, 2], [8, 1]];
+
+function haltWatch_(now, props) {
+  if (now.t < '09:01' || now.t > '15:20') return;
+  var hits = haltRules_(haltQuotes_(), now.t);
+  hits.forEach(function (h) {
+    var key = 'h:' + now.date + ':' + h.id, st = props.getProperty(key);
+    if (st === 'sent') return;
+    if (h.sure || st === prevMin_(now.t)) {   // 확정이거나, 바로 앞 분에도 조건이었으면 알림
+      props.setProperty(key, 'sent');
+      pushTo_(function () { return true; }, h.title, h.body);
+      Logger.log('알림: ' + h.title + ' / ' + h.body);
+    } else props.setProperty(key, now.t);    // 처음 본 분은 적어 두고 다음 분에 다시 확인
+  });
+}
+
+function prevMin_(t) { var m = +t.slice(0, 2) * 60 + +t.slice(3) - 1; return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); }
+
+/** 지수 시세 4개(코스피·코스닥·코스피200·코스닥150) — 코드가 안 맞으면 다음 후보, 맞은 코드는 기억 */
+function haltQuotes_() {
+  var props = PropertiesService.getScriptProperties(), out = {};
+  Object.keys(HALT_IDX).forEach(function (k) {
+    var cands = HALT_IDX[k], known = props.getProperty('hcode:' + k);
+    if (known) cands = [known].concat(cands.filter(function (c) { return c !== known; }));
+    for (var i = 0; i < cands.length; i++) {
+      var j = parse_(UrlFetchApp.fetch('https://polling.finance.naver.com/api/realtime/domestic/index/' + cands[i], opt_()));
+      var d = j && Array.isArray(j.datas) ? j.datas[0] : null, q = quoteOf(d);
+      if (q && q.pct !== null) { q.flags = haltFlags_(d); out[k] = q; if (known !== cands[i]) props.setProperty('hcode:' + k, cands[i]); break; }
+    }
+  });
+  return out;
+}
+
+/** 시세 안에 발동 여부 칸이 있으면 읽는다(칸 이름이 조금 달라도 잡히게). { side: 'buy'|'sell'|true, cb: 단계 } */
+function haltFlags_(d) {
+  var f = {};
+  (function walk(o, depth) {
+    if (!o || typeof o !== 'object' || depth > 3) return;
+    Object.keys(o).forEach(function (k) {
+      var v = o[k], on = v === true || v === 'Y' || v === 'y' || v === 1 || v === '1';
+      if (/side.?car/i.test(k)) { if (/sell|매도/i.test(String(v))) f.side = 'sell'; else if (/buy|매수/i.test(String(v))) f.side = 'buy'; else if (on) f.side = true; }
+      if (/circuit|^cb(yn|step|level)?$/i.test(k) && (on || +v > 0)) f.cb = +v > 1 ? +v : 1;
+      if (v && typeof v === 'object') walk(v, depth + 1);
+    });
+  })(d, 0);
+  return f;
+}
+
+/** 발동 조건 판단 — 알릴 것 목록 [{ id, title, body, sure }] (시세만 받아 계산해서 시험하기 쉽게) */
+function haltRules_(q, t) {
+  var out = [], pct = function (x) { return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(2) + '%'; };
+  // [시장, 이름, 사이드카 기준 지수, 그 이름, 사이드카 %, 코스닥150 지수 조건 %]
+  [['KOSPI', '코스피', 'K200', '코스피200', 5, 0], ['KOSDAQ', '코스닥', 'Q150', '코스닥150', 6, 3]].forEach(function (m) {
+    var main = q[m[0]], base = q[m[2]];
+    if (!main) return;
+    // 서킷브레이커 (하락만, 14:50 이후 없음)
+    var cbSure = main.flags && main.flags.cb;
+    if (cbSure || t <= '14:50') {
+      for (var i = 0; i < CB_LV.length; i++) {
+        var lv = CB_LV[i];
+        if (cbSure ? cbSure >= lv[1] : main.pct <= -lv[0]) {
+          out.push({ id: 'cb' + lv[1] + ':' + m[0], sure: !!cbSure,
+            title: '🚨 ' + m[1] + ' 서킷브레이커 ' + lv[1] + '단계' + (cbSure ? ' 발동' : ' 조건 도달(추정)'),
+            body: m[1] + ' ' + (main.price != null ? main.price.toLocaleString('ko-KR') + ' ' : '') + pct(main.pct) + ' · 전일 대비 ' + lv[0] + '% 이상 하락'
+              + (lv[1] < 3 ? ' → 20분 매매 정지' : ' → 오늘 장 종료') + ' (' + t + ')' });
+          break;
+        }
+      }
+    }
+    // 사이드카 (매수·매도, 시장마다 하루 한 번)
+    var sideSure = (base && base.flags && base.flags.side) || (main.flags && main.flags.side);
+    var p = base ? base.pct : null, dir = '';
+    if (sideSure) dir = sideSure === 'sell' || sideSure === 'buy' ? sideSure : (p !== null && p < 0 ? 'sell' : 'buy');
+    else if (p !== null && Math.abs(p) >= m[4]) dir = p > 0 ? 'buy' : 'sell';
+    if (dir) out.push({ id: 'side:' + m[0], sure: !!sideSure,
+      title: (dir === 'buy' ? '🔺 ' : '🔻 ') + m[1] + ' ' + (dir === 'buy' ? '매수' : '매도') + ' 사이드카' + (sideSure ? ' 발동' : ' 조건 도달(추정)'),
+      body: (base ? m[3] + ' ' + pct(base.pct) + ' · ' : '') + m[1] + ' ' + pct(main.pct) + ' → 프로그램 ' + (dir === 'buy' ? '매수' : '매도') + ' 호가 5분 정지 (' + t + ')' });
+  });
+  return out;
+}
+
+/** 편집기에서 실행: 지수 4개 원본 시세와 판단 결과를 로그로 (코드·칸 이름 확인용) */
+function debugHalt() {
+  var q = haltQuotes_();
+  Logger.log(JSON.stringify(q, null, 1));
+  Logger.log(JSON.stringify(haltRules_(q, kst_().t), null, 1));
+  ['KOSPI', 'KPI200', 'KQ150', 'KOSDAQ150'].forEach(function (c) {
+    var r = UrlFetchApp.fetch('https://polling.finance.naver.com/api/realtime/domestic/index/' + c, opt_());
+    Logger.log(c + ' ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 900));
+  });
+}
+
+/** 편집기에서 실행: 알림을 켠 휴대폰으로 사이드카 알림 모양을 시험으로 보낸다 */
+function testHaltPush() {
+  return pushTo_(function () { return true; }, '🔻 코스피 매도 사이드카 조건 도달(추정) · 시험', '코스피200 −5.12% · 코스피 −4.87% → 프로그램 매도 호가 5분 정지 (시험 알림이에요)');
 }
 
 function eok_(v) { if (v === null || v === undefined) return '-'; var n = Math.round(v); return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toLocaleString('ko-KR') + '억'; }

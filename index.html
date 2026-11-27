@@ -306,14 +306,14 @@ body.open,body.sdopen{overflow:hidden}
   <p class="hint">비워 두면 기본 종목만 1~2분 간격으로 갱신돼요. Apps Script 주소를 넣으면 모든 종목을 15초 간격으로 봐요.</p>
   <button class="btn" id="btnSave">저장하고 불러오기</button>
   <button class="btn ghost" id="btnDemo">예시 데이터로 화면만 보기</button>
-  <h3>장 마감 알림</h3>
-  <p class="hint" id="pushHint">평일 장이 끝나면(15:31) 코스피·코스닥 외국인·기관·개인 순매수를 이 휴대폰으로 알려 줘요.</p>
+  <h3>장 마감·급변 알림</h3>
+  <p class="hint" id="pushHint">평일 장이 끝나면(15:31) 코스피·코스닥 외국인·기관·개인 순매수를, 장중에 매수·매도 사이드카나 서킷브레이커 조건이 되면 바로 이 휴대폰으로 알려 줘요.</p>
   <button class="btn ghost" id="btnPush" hidden>이 휴대폰으로 받기</button>
 </section>
 
 <script>
 /* ===== 설정 ===== */
-const BUILD = '1795795914';   // 배포 때 version.txt 와 같이 올림 (bump_version.py)
+const BUILD = '1795802041';   // 배포 때 version.txt 와 같이 올림 (bump_version.py)
 const API_URL = "";
 const SNAPSHOT_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/data/data.json";   // 5분 캐시
 const DETAIL_URL = "https://raw.githubusercontent.com/friese8807/supply-radar/detail/d/";   // 종목 상세(30분마다)
@@ -1055,7 +1055,7 @@ const pushCall = async (action, payload = {}) => {
 };
 function pushUi(msg) {
   const b = $("btnPush"), h = $("pushHint"), st = Push.state;
-  const base = "평일 장이 끝나면(15:31) 코스피·코스닥 외국인·기관·개인 순매수를 이 휴대폰으로 알려 줘요.";
+  const base = "평일 장이 끝나면(15:31) 코스피·코스닥 외국인·기관·개인 순매수를, 장중에 매수·매도 사이드카나 서킷브레이커 조건이 되면 바로 이 휴대폰으로 알려 줘요.";
   if (!S.api) { b.hidden = true; h.textContent = base + " 위 데이터 서버를 연결하면 켤 수 있어요."; return; }
   b.hidden = !(st === "on" || st === "off"); b.textContent = st === "on" ? "알림 끄기" : "이 휴대폰으로 받기";
   h.textContent = msg || (base + " 지금: " + Push.note(st));
