@@ -24,3 +24,12 @@
 ## 새 버전 반영
 
 `index.html`을 고쳐 올릴 때는 `index.html`의 `BUILD` 숫자와 `version.txt` 숫자를 같은 새 숫자로 함께 올립니다. 앱이 열리거나 화면으로 돌아올 때 `version.txt`를 확인해 숫자가 다르면 새 버전으로 다시 엽니다.
+
+## 데스크톱 미리보기 (Claude 데스크톱 오른쪽 패널)
+
+```bash
+node tools/preview.cjs index.html --out /tmp/preview.html   # 아이폰 틀 · ☀️주간/🌙야간 · 마우스로 끌어서 스크롤 · 서버 없으면 예시 모드
+```
+
+자료 파일로 보기는 `--data 자료.json`(서버 응답 흉내), 시각 고정은 `--now 2026-12-03T07:40`. 미리보기 파일은 저장소 밖에 만든다.
+도구는 friese-mobile-webapp-kit 스킬의 `scripts/preview.cjs` 와 같다.
